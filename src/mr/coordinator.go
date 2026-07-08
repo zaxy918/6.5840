@@ -1,18 +1,70 @@
 package mr
 
-import "log"
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
-
+import (
+	"errors"
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
+	"sync"
+)
 
 type Coordinator struct {
-	// Your definitions here.
-
+	//TODO Your definitions here.
+	mMapper           int
+	rReducer          int
+	allMapDone        bool
+	aliveWorker       int
+	mu                sync.Mutex
+	inputFile         []string
+	inputIdx          int
+	intermediateFiles []string
+	nReduce           int
 }
 
-// Your code here -- RPC handlers for the worker to call.
+// TODO Your code here -- RPC handlers for the worker to call.
+func (c *Coordinator) Assign(args *WorkerArgs, reply *WorkerReply) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	status := args.Status
+	switch status {
+	case Wait:
+		// TODO File part
+		// Mappers haven't done
+		if !c.allMapDone {
+			if c.inputIdx < len(c.inputFile) {
+				c.mMapper++
+				c.aliveWorker++
+				reply = &WorkerReply{MapTask, c.mMapper, []string{c.inputFile[c.inputIdx]}, c.nReduce}
+				c.inputIdx++
+			} else {
+				reply = &WorkerReply{Status: Wait}
+			}
+		} else { //TODO All mappers done
+			//* Debug
+			reply = &WorkerReply{Status: Exit}
+		}
+	case MapDone:
+		c.mMapper--
+		c.intermediateFiles = append(c.intermediateFiles, args.InterFileNames...)
+		// All mappers done
+		if c.mMapper == 0 {
+			c.allMapDone = true
+			//* Debug code
+			for _, filename := range c.intermediateFiles {
+				os.Remove(filename)
+			}
+			os.Exit(0)
+		}
+		reply = &WorkerReply{Status: Wait}
+		//TODO
+	case ReduceDone:
+	default:
+		return errors.New("invalid task status")
+	}
+	return nil
+}
 
 // an example RPC handler.
 //
@@ -21,7 +73,6 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	reply.Y = args.X + 1
 	return nil
 }
-
 
 // start a thread that listens for RPCs from worker.go
 func (c *Coordinator) server(sockname string) {
@@ -40,9 +91,10 @@ func (c *Coordinator) server(sockname string) {
 func (c *Coordinator) Done() bool {
 	ret := false
 
-	// Your code here.
-
-
+	//TODO Your code here.
+	if c.mMapper == 0 {
+		ret = true
+	}
 	return ret
 }
 
@@ -50,11 +102,7 @@ func (c *Coordinator) Done() bool {
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
-
-	// Your code here.
-
-
+	c := Coordinator{inputFile: files, nReduce: nReduce}
 	c.server(sockname)
 	return &c
 }
