@@ -31,27 +31,41 @@ var nReduce int
 
 func writeIntermediate(kvs []KeyValue) []string {
 	// Write all kvs to file to avoid open the file repeatedly
+	err := os.MkdirAll("./tmp", 0755)
+	if err != nil {
+		log.Fatalf("create tmp dir failed: %v", err)
+	}
+	//*Debug
+	fmt.Println("Get in writeIntermediate")
 	fileToContent := make(map[string]([]KeyValue))
 	for _, kv := range kvs {
-		reducerId := ihash(kv.Key) % nReduce
+		reducerId := ihash(kv.Key)%nReduce + 1
 		filename := fmt.Sprintf("mr-%v-%v", taskId, reducerId)
 		fileToContent[filename] = append(fileToContent[filename], kv)
 	}
+	fmt.Println("Finish fileToContent map")
 	interFileNames := []string{}
 	for filename, kvs := range fileToContent {
 		interFileNames = append(interFileNames, filename)
-		fTemp, err := os.CreateTemp("", filename)
+		fTemp, err := os.CreateTemp("./tmp/", "mr-tmp-*")
+		tempPath := fTemp.Name()
+		fmt.Println("Create and write to temp file")
 		// *Debug
-		fmt.Println("Create temp file %v", fTemp.Name())
-		defer fTemp.Close()
 		if err != nil {
 			log.Fatalf(err.Error())
 		}
+		fmt.Println("Create temp file ", filename)
 		enc := json.NewEncoder(fTemp)
 		if err := enc.Encode(kvs); err != nil {
 			log.Fatalf(err.Error())
 		}
+		fTemp.Close()
+		err = os.Rename(tempPath, filename)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
+	fmt.Println("Finish create and write to temp file")
 	return interFileNames
 }
 
@@ -69,7 +83,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 		if !ok {
 			log.Fatalf("RPC call failure")
 		} else {
-			fmt.Println(reply)
+			fmt.Println("Reply: ", reply)
 			// Run the task
 			status = reply.Status
 			taskId = reply.TaskId
@@ -89,6 +103,8 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 					kvs = append(kvs, mapf(filename, string(content))...)
 				}
 				// Generate temporary file for reduce worker
+				//*Debug
+				fmt.Println("Call writeIntermediate")
 				interFileNames := writeIntermediate(kvs)
 				args = WorkerArgs{MapDone, interFileNames}
 			case ReduceTask:
@@ -97,7 +113,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 				os.Exit(0)
 			}
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(time.Second)
 	}
 	// uncomment to send the Example RPC to the coordinator.
 	// CallExample()

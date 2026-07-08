@@ -2,6 +2,7 @@ package mr
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -31,19 +32,26 @@ func (c *Coordinator) Assign(args *WorkerArgs, reply *WorkerReply) error {
 	switch status {
 	case Wait:
 		// TODO File part
+		//*Debug
+		fmt.Println("In Wait case")
 		// Mappers haven't done
 		if !c.allMapDone {
+			//*Debug
+			fmt.Println("In !c.allMapDone")
 			if c.inputIdx < len(c.inputFile) {
+				//*Debug
+				fmt.Println("assign mapper")
 				c.mMapper++
 				c.aliveWorker++
-				reply = &WorkerReply{MapTask, c.mMapper, []string{c.inputFile[c.inputIdx]}, c.nReduce}
+				*reply = WorkerReply{MapTask, c.mMapper, []string{c.inputFile[c.inputIdx]}, c.nReduce}
+				fmt.Println("Reply in coordinator", reply)
 				c.inputIdx++
 			} else {
-				reply = &WorkerReply{Status: Wait}
+				*reply = WorkerReply{Status: Wait}
 			}
 		} else { //TODO All mappers done
 			//* Debug
-			reply = &WorkerReply{Status: Exit}
+			*reply = WorkerReply{Status: Exit}
 		}
 	case MapDone:
 		c.mMapper--
@@ -53,11 +61,13 @@ func (c *Coordinator) Assign(args *WorkerArgs, reply *WorkerReply) error {
 			c.allMapDone = true
 			//* Debug code
 			for _, filename := range c.intermediateFiles {
+				fmt.Println("Remove", filename)
 				os.Remove(filename)
 			}
+			os.Remove("./tmp")
 			os.Exit(0)
 		}
-		reply = &WorkerReply{Status: Wait}
+		*reply = WorkerReply{Status: Wait}
 		//TODO
 	case ReduceDone:
 	default:
@@ -84,6 +94,8 @@ func (c *Coordinator) server(sockname string) {
 		log.Fatalf("listen error %s: %v", sockname, e)
 	}
 	go http.Serve(l, nil)
+	//*Debug
+	fmt.Println("coordinator rpc server running")
 }
 
 // main/mrcoordinator.go calls Done() periodically to find out
@@ -92,9 +104,11 @@ func (c *Coordinator) Done() bool {
 	ret := false
 
 	//TODO Your code here.
-	if c.mMapper == 0 {
+	if c.allMapDone {
 		ret = true
 	}
+	//*Debug
+	fmt.Println("Running in done")
 	return ret
 }
 
@@ -103,6 +117,8 @@ func (c *Coordinator) Done() bool {
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator {
 	c := Coordinator{inputFile: files, nReduce: nReduce}
+	// *Debug
+	fmt.Println("create coordinator")
 	c.server(sockname)
 	return &c
 }
