@@ -2,7 +2,7 @@
 
 # ========== 配置项 ==========
 SOCK_NAME="sock123"       # 套接字文件名
-WORKER_COUNT=10            # 启动的 Worker 数量
+WORKER_COUNT=3            # 启动的 Worker 数量
 PLUGIN_FILE="wc.so"       # 插件文件名
 INPUT_FILES="pg*.txt"     # 输入文件匹配规则
 # ============================
@@ -13,6 +13,7 @@ trap 'echo -e "\n检测到中断，正在清理进程..."; pkill -P $$ 2>/dev/nu
 echo "====== 步骤1：清理旧环境 ======"
 rm -f $SOCK_NAME
 rm -rf ./logs
+rm -mr-out-*
 mkdir ./logs
 # 杀掉残留的相关进程，避免端口/套接字占用
 pkill -f "mrcoordinator.go" 2>/dev/null

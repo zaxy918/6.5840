@@ -11,13 +11,15 @@ package mr
 // and reply for an RPC.
 //
 
+type Status int
+
 const (
-	MapTask    string = "MapTask"
-	ReduceTask string = "ReduceTask"
-	Wait       string = "Wait"
-	MapDone    string = "MapDone"
-	ReduceDone string = "ReduceDone"
-	Exit       string = "Exit"
+	MapTask Status = iota
+	ReduceTask
+	Wait
+	MapDone
+	ReduceDone
+	Exit
 )
 
 type ExampleArgs struct {
@@ -32,13 +34,14 @@ type ExampleReply struct {
 
 // Worker RPC args
 type WorkerArgs struct {
-	Status         string
+	Status         Status
+	IsFirstCall    bool
 	InterFileNames []string
 }
 
 // Worker RPC reply
 type WorkerReply struct {
-	Status  string
+	Status  Status
 	TaskId  int
 	Files   []string
 	NReduce int

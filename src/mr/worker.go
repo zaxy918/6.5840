@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -15,6 +16,12 @@ type KeyValue struct {
 	Key   string
 	Value string
 }
+
+type KVList []KeyValue
+
+func (kv KVList) Len() int           { return len(kv) }
+func (kv KVList) Swap(i, j int)      { kv[i], kv[j] = kv[j], kv[i] }
+func (kv KVList) Less(i, j int) bool { return kv[i].Key < kv[i].Key }
 
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
@@ -25,48 +32,56 @@ func ihash(key string) int {
 }
 
 var coordSockName string // socket for coordinator
-var status string
 var taskId int
 var nReduce int
 
 func writeIntermediate(kvs []KeyValue) []string {
 	// Write all kvs to file to avoid open the file repeatedly
-	err := os.MkdirAll("./tmp", 0755)
-	if err != nil {
-		log.Fatalf("create tmp dir failed: %v", err)
-	}
 	//*Debug
-	fmt.Println("Get in writeIntermediate")
+	//fmt.Println("Get in writeIntermediate")
 	fileToContent := make(map[string]([]KeyValue))
 	for _, kv := range kvs {
-		reducerId := ihash(kv.Key)%nReduce + 1
-		filename := fmt.Sprintf("mr-%v-%v", taskId, reducerId)
+		reduceId := ihash(kv.Key) % nReduce
+		filename := fmt.Sprintf("mr-%v-%v", taskId, reduceId)
 		fileToContent[filename] = append(fileToContent[filename], kv)
 	}
-	fmt.Println("Finish fileToContent map")
+	//fmt.Println("Finish fileToContent map")
 	interFileNames := []string{}
 	for filename, kvs := range fileToContent {
 		interFileNames = append(interFileNames, filename)
-		fTemp, err := os.CreateTemp("./tmp/", "mr-tmp-*")
+		fTemp, err := os.CreateTemp("", "mr-tmp-*")
 		tempPath := fTemp.Name()
-		fmt.Println("Create and write to temp file")
-		// *Debug
 		if err != nil {
-			log.Fatalf(err.Error())
+			log.Fatal(err, "in temp file create")
 		}
-		fmt.Println("Create temp file ", filename)
 		enc := json.NewEncoder(fTemp)
 		if err := enc.Encode(kvs); err != nil {
 			log.Fatalf(err.Error())
 		}
 		fTemp.Close()
-		err = os.Rename(tempPath, filename)
+		err = os.Rename(tempPath, fmt.Sprintf("/tmp/%v", filename))
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
-	fmt.Println("Finish create and write to temp file")
+	//fmt.Println("Finish create and write to temp file")
 	return interFileNames
+}
+
+func readFromInterFiles(interFileNames []string) (allkvs []KeyValue) {
+	for _, filename := range interFileNames {
+		f, err := os.Open(fmt.Sprintf("/tmp/%v", filename))
+		if err != nil {
+			log.Fatal(err, "in readFromInterFiles")
+		}
+		var kvs []KeyValue
+		dec := json.NewDecoder(f)
+		if err = dec.Decode(&kvs); err != nil {
+			log.Fatal(err, "in decode")
+		}
+		allkvs = append(allkvs, kvs...)
+	}
+	return
 }
 
 // main/mrworker.go calls this function.
@@ -74,8 +89,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
 	coordSockName = sockname
-	status = Wait
-	args := WorkerArgs{Status: status}
+	args := WorkerArgs{Status: Wait, IsFirstCall: true}
 	// Waiting for the coordinator to assign tasks
 	for {
 		reply := WorkerReply{}
@@ -83,37 +97,62 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 		if !ok {
 			log.Fatalf("RPC call failure")
 		} else {
-			fmt.Println("Reply: ", reply)
 			// Run the task
-			status = reply.Status
+			if reply.Status == Wait {
+				args = WorkerArgs{Status: Wait}
+				time.Sleep(time.Second)
+				continue
+			}
 			taskId = reply.TaskId
 			files := reply.Files
 			nReduce = reply.NReduce
-			switch status {
+			switch reply.Status {
 			case MapTask:
+				//fmt.Printf("Task %v start map task\n", reply.TaskId)
 				// Iterate all files
 				kvs := []KeyValue{}
 				for _, filename := range files {
 					content, err := os.ReadFile(filename)
 					if err != nil {
 						log.Fatalf("Read file fail: %v", filename)
-						status = Wait
+						args = WorkerArgs{Status: Wait}
 						continue
 					}
 					kvs = append(kvs, mapf(filename, string(content))...)
 				}
 				// Generate temporary file for reduce worker
-				//*Debug
-				fmt.Println("Call writeIntermediate")
 				interFileNames := writeIntermediate(kvs)
-				args = WorkerArgs{MapDone, interFileNames}
+				args = WorkerArgs{Status: MapDone, InterFileNames: interFileNames}
+				//fmt.Printf("Map task %v done\n", taskId)
 			case ReduceTask:
-				//TODO Reduce task
+				//*Debug
+				//fmt.Printf("Task %v start reduce task\n", reply.TaskId)
+				interFileNames := reply.Files
+				reduceId := reply.TaskId
+				kvs := readFromInterFiles(interFileNames)
+				//*Debug
+				//fmt.Println(kvs)
+				sort.Sort(KVList(kvs))
+				keyToAllValues := make(map[string][]string)
+				for _, kv := range kvs {
+					keyToAllValues[kv.Key] = append(keyToAllValues[kv.Key], kv.Value)
+				}
+				//*Debug
+				//fmt.Println(keyToAllValues)
+				oFile, err := os.Create(fmt.Sprintf("mr-out-%v", reduceId))
+				if err != nil {
+					log.Fatalf("Create file %v fail\n", oFile)
+				}
+				for k, vs := range keyToAllValues {
+					res := reducef(k, vs)
+					fmt.Fprintf(oFile, "%v %v\n", k, res)
+				}
+				args = WorkerArgs{Status: ReduceDone}
+				//fmt.Printf("Reduce task %v done\n", taskId)
 			case Exit:
 				os.Exit(0)
 			}
 		}
-		time.Sleep(time.Second)
 	}
 	// uncomment to send the Example RPC to the coordinator.
 	// CallExample()
