@@ -2,8 +2,8 @@
 
 # ========== 配置项 ==========
 SOCK_NAME="sock123"       # 套接字文件名
-WORKER_COUNT=3            # 启动的 Worker 数量
-PLUGIN_FILE="wc.so"       # 插件文件名
+WORKER_COUNT=10            # 启动的 Worker 数量
+PLUGIN_FILE="crash.so"       # 插件文件名
 INPUT_FILES="pg*.txt"     # 输入文件匹配规则
 # ============================
 
@@ -22,7 +22,7 @@ sleep 0.5
 echo "✅ 旧环境清理完成"
 
 echo "====== 步骤2：编译插件 ======"
-go build -buildmode=plugin ../mrapps/wc.go
+go build -buildmode=plugin ../mrapps/crash.go
 if [ $? -ne 0 ]; then
     echo "❌ 插件编译失败，脚本终止"
     exit 1

@@ -32,20 +32,21 @@ func ihash(key string) int {
 }
 
 var coordSockName string // socket for coordinator
-var taskId int
 var nReduce int
 
-func writeIntermediate(kvs []KeyValue) []string {
+func writeIntermediate(kvs []KeyValue, taskId int) []string {
 	// Write all kvs to file to avoid open the file repeatedly
-	//*Debug
-	//fmt.Println("Get in writeIntermediate")
+	//*debug
+	// fmt.Println("Get in writeIntermediate")
 	fileToContent := make(map[string]([]KeyValue))
 	for _, kv := range kvs {
-		reduceId := ihash(kv.Key) % nReduce
-		filename := fmt.Sprintf("mr-%v-%v", taskId, reduceId)
+		reducerId := ihash(kv.Key) % nReduce
+		filename := fmt.Sprintf("mr-%v-%v", taskId, reducerId)
 		fileToContent[filename] = append(fileToContent[filename], kv)
 	}
-	//fmt.Println("Finish fileToContent map")
+	//*debug
+	// time.Sleep(time.Second)
+	// fmt.Println("Finish fileToContent map")
 	interFileNames := []string{}
 	for filename, kvs := range fileToContent {
 		interFileNames = append(interFileNames, filename)
@@ -64,7 +65,8 @@ func writeIntermediate(kvs []KeyValue) []string {
 			log.Fatal(err)
 		}
 	}
-	//fmt.Println("Finish create and write to temp file")
+	//*debug
+	// fmt.Println("Finish create and write to temp file")
 	return interFileNames
 }
 
@@ -99,16 +101,16 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 		} else {
 			// Run the task
 			if reply.Status == Wait {
-				args = WorkerArgs{Status: Wait}
-				time.Sleep(time.Second)
+				args = WorkerArgs{Status: Wait, WorkerId: reply.WorkerId}
+				time.Sleep(time.Millisecond * 50)
 				continue
 			}
-			taskId = reply.TaskId
 			files := reply.Files
 			nReduce = reply.NReduce
 			switch reply.Status {
 			case MapTask:
-				//fmt.Printf("Task %v start map task\n", reply.TaskId)
+				//*debug
+				// fmt.Printf("Worker %v start map task%v\n", reply.WorkerId, reply.TaskId)
 				// Iterate all files
 				kvs := []KeyValue{}
 				for _, filename := range files {
@@ -121,25 +123,26 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 					kvs = append(kvs, mapf(filename, string(content))...)
 				}
 				// Generate temporary file for reduce worker
-				interFileNames := writeIntermediate(kvs)
-				args = WorkerArgs{Status: MapDone, InterFileNames: interFileNames}
-				//fmt.Printf("Map task %v done\n", taskId)
+				interFileNames := writeIntermediate(kvs, reply.TaskId)
+				args = WorkerArgs{Status: MapDone, InterFileNames: interFileNames, WorkerId: reply.WorkerId}
+				//*debug
+				// fmt.Printf("Map task %v done\n", reply.TaskId)
 			case ReduceTask:
-				//*Debug
-				//fmt.Printf("Task %v start reduce task\n", reply.TaskId)
+				//*debug
+				// fmt.Printf("Worker %v start reduce task%v\n", reply.WorkerId, reply.TaskId)
 				interFileNames := reply.Files
-				reduceId := reply.TaskId
+				reducerId := reply.TaskId
 				kvs := readFromInterFiles(interFileNames)
-				//*Debug
+				//*debug
 				//fmt.Println(kvs)
 				sort.Sort(KVList(kvs))
 				keyToAllValues := make(map[string][]string)
 				for _, kv := range kvs {
 					keyToAllValues[kv.Key] = append(keyToAllValues[kv.Key], kv.Value)
 				}
-				//*Debug
-				//fmt.Println(keyToAllValues)
-				oFile, err := os.Create(fmt.Sprintf("mr-out-%v", reduceId))
+				//*debug
+				// fmt.Println(keyToAllValues)
+				oFile, err := os.Create(fmt.Sprintf("mr-out-%v", reducerId))
 				if err != nil {
 					log.Fatalf("Create file %v fail\n", oFile)
 				}
@@ -147,8 +150,9 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 					res := reducef(k, vs)
 					fmt.Fprintf(oFile, "%v %v\n", k, res)
 				}
-				args = WorkerArgs{Status: ReduceDone}
-				//fmt.Printf("Reduce task %v done\n", taskId)
+				args = WorkerArgs{Status: ReduceDone, WorkerId: reply.WorkerId}
+				//*debug
+				// fmt.Printf("Reduce task %v done\n", reply.TaskId)
 			case Exit:
 				os.Exit(0)
 			}

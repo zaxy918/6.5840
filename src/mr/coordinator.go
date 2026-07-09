@@ -11,90 +11,166 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
-type Coordinator struct {
-	mMapper           int
-	mapperCnt         int
-	rReducer          int
-	allMapDone        bool
-	aliveWorker       int
-	mu                sync.Mutex
-	inputFile         []string
-	inputIdx          int
-	intermediateFiles map[int][]string
-	interFileCnt      int
-	nReduce           int
+const (
+	MAX_WORKER  = 10
+	EXPIRE_TIME = 10 * time.Second
+)
+
+type WorkerEntry struct {
+	status   Status
+	workerId int
+	files    []string
+	deadLine time.Time
+	taskId   int
 }
 
-// TODO Your code here -- RPC handlers for the worker to call.
+type Task struct {
+	taskId int
+	status Status
+	files  []string
+}
+
+type Coordinator struct {
+	mu                sync.Mutex
+	workerId          int
+	allMapDone        bool
+	allReduceDone     bool
+	interFileCnt      int
+	nReduce           int
+	aliveWorker       int
+	taskId            int
+	mapperCnt         int
+	reducerCnt        int
+	inputFile         []string
+	intermediateFiles map[int][]string
+	workerList        []WorkerEntry
+	failTaskFiles     []Task
+}
+
+func (c *Coordinator) replyAndSetWorkerList(worker *WorkerEntry, reply *WorkerReply) {
+	c.workerList[worker.workerId] = *worker
+	*reply = WorkerReply{worker.status, worker.workerId, worker.taskId, worker.files, c.nReduce}
+}
+
 func (c *Coordinator) Assign(args *WorkerArgs, reply *WorkerReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	status := args.Status
+	worker := WorkerEntry{status: args.Status, workerId: args.WorkerId}
 	if args.IsFirstCall {
+		worker.workerId = c.workerId
+		worker.taskId = -1
+		c.workerList = append(c.workerList, worker)
+		c.workerId++
 		c.aliveWorker++
 	}
-	switch status {
+	if c.workerList[worker.workerId].status == Exit {
+		worker = WorkerEntry{Exit, worker.workerId, nil, time.Now().Add(EXPIRE_TIME), -1}
+		c.replyAndSetWorkerList(&worker, reply)
+		return nil
+	}
+	switch worker.status {
 	case Wait:
 		// Mappers haven't done
-		if !c.allMapDone {
-			if c.inputIdx < len(c.inputFile) {
+		if len(c.failTaskFiles) > 0 {
+			task := c.failTaskFiles[0]
+			//*debug
+			// fmt.Printf("Worker%v continue failed task%v\n", worker.workerId, task.taskId)
+			expireTime := time.Now().Add(EXPIRE_TIME)
+			worker = WorkerEntry{task.status, worker.workerId, task.files, expireTime, task.taskId}
+			c.replyAndSetWorkerList(&worker, reply)
+			c.failTaskFiles = c.failTaskFiles[1:]
+		} else if !c.allMapDone {
+			if len(c.inputFile) > 0 {
 				// Have files to assign
-				//fmt.Printf("Assign a map task with taskId=%v\n", c.mMapper)
-				*reply = WorkerReply{MapTask, c.mMapper, []string{c.inputFile[c.inputIdx]}, c.nReduce}
-				c.mMapper++
+				//*debug
+				// fmt.Printf("Assign a map task with taskId=%v\n", c.taskId)
+				expireTime := time.Now().Add(EXPIRE_TIME)
+				worker = WorkerEntry{MapTask, worker.workerId, []string{c.inputFile[0]}, expireTime, c.taskId}
+				c.replyAndSetWorkerList(&worker, reply)
+				c.inputFile = c.inputFile[1:]
 				c.mapperCnt++
-				c.inputIdx++
+				c.taskId++
+				//*debug
+				// fmt.Println(reply)
 			} else {
 				// No files to assign
-				//fmt.Println("No file to map, just wait")
-				*reply = WorkerReply{Status: Wait}
+				//*debug
+				// fmt.Println("No file to map, just wait")
+				expireTime := time.Now().Add(EXPIRE_TIME)
+				worker.deadLine = expireTime
+				c.replyAndSetWorkerList(&worker, reply)
 			}
 		} else if c.interFileCnt > 0 {
-			//.fmt.Printf("Assign a reduce task with taskId=%v\n", c.rReducer)
-			reduceId := c.rReducer
-			interFileNames := c.intermediateFiles[reduceId]
-			c.interFileCnt -= len(c.intermediateFiles[reduceId])
-			*reply = WorkerReply{ReduceTask, reduceId, interFileNames, c.nReduce}
-			c.rReducer++
-		} else {
-			//fmt.Println("Kill worker")
+			//*debug
+			// fmt.Printf("Assign a reduce task with taskId=%v\n", c.taskId)
+			interFileNames := c.intermediateFiles[c.taskId]
+			expireTime := time.Now().Add(EXPIRE_TIME)
+			worker = WorkerEntry{ReduceTask, worker.workerId, interFileNames, expireTime, c.taskId}
+			c.replyAndSetWorkerList(&worker, reply)
+			c.interFileCnt -= len(c.intermediateFiles[c.taskId])
+			c.taskId++
+			c.reducerCnt++
+		} else if c.allReduceDone {
+			//*debug
+			// fmt.Println("Kill worker")
 			c.aliveWorker--
-			*reply = WorkerReply{Status: Exit}
+			worker.status = Exit
+			c.replyAndSetWorkerList(&worker, reply)
 			if c.aliveWorker == 0 {
-				//fmt.Println("All worker killed, clean inter files")
+				//*debug
+				// fmt.Println("All worker killed, clean inter files")
 				for _, filenames := range c.intermediateFiles {
 					for _, filename := range filenames {
 						os.Remove(fmt.Sprintf("/tmp/%v", filename))
 					}
 				}
-				//fmt.Println("All inter files cleaned, goodbye!")
+				//*debug
+				// fmt.Println("All inter files cleaned, goodbye!")
 			}
+		} else {
+			worker.deadLine = time.Now().Add(EXPIRE_TIME)
+			worker.taskId = -1
+			c.replyAndSetWorkerList(&worker, reply)
 		}
 	case MapDone:
-		//fmt.Println("Maptask done, store inter file location")
+		//*debug
+		// fmt.Println("Maptask done, store inter file location")
 		c.mapperCnt--
 		c.interFileCnt += len(args.InterFileNames)
 		for _, filename := range args.InterFileNames {
 			parts := strings.Split(filename, "-")
-			reduceId, err := strconv.Atoi(parts[len(parts)-1])
+			reducerId, err := strconv.Atoi(parts[len(parts)-1])
 			if err != nil {
 				log.Fatal(err, "in MapDone")
 			}
-			c.intermediateFiles[reduceId] = append(c.intermediateFiles[reduceId], filename)
+			c.intermediateFiles[reducerId] = append(c.intermediateFiles[reducerId], filename)
 		}
-		//fmt.Println("Inter file stored")
+		//*debug
+		// fmt.Println("Inter file stored")
 		// All mappers done
 		// This is the last mapper and all files are handled
-		if c.mapperCnt == 0 && c.inputIdx == len(c.inputFile) {
-			//fmt.Println("All map work done")
+		if c.mapperCnt == 0 && len(c.inputFile) == 0 && len(c.failTaskFiles) == 0 {
+			//*debug
+			// fmt.Println("All map work done")
 			c.allMapDone = true
+			c.taskId = 0
 		}
-		*reply = WorkerReply{Status: Wait}
+		expireTime := time.Now().Add(EXPIRE_TIME)
+		worker = WorkerEntry{Wait, worker.workerId, nil, expireTime, -1}
+		c.replyAndSetWorkerList(&worker, reply)
 	case ReduceDone:
-		//fmt.Println("One reduce task done")
-		*reply = WorkerReply{Status: Wait}
+		c.reducerCnt--
+		if c.reducerCnt == 0 && c.interFileCnt == 0 && len(c.failTaskFiles) == 0 {
+			c.allReduceDone = true
+		}
+		//*debug
+		// fmt.Println("One reduce task done")
+		expireTime := time.Now().Add(EXPIRE_TIME)
+		worker = WorkerEntry{Wait, worker.workerId, nil, expireTime, -1}
+		c.replyAndSetWorkerList(&worker, reply)
 	default:
 		return errors.New("invalid task status")
 	}
@@ -118,8 +194,8 @@ func (c *Coordinator) server(sockname string) {
 	if e != nil {
 		log.Fatalf("listen error %s: %v", sockname, e)
 	}
-	//*Debug
-	//fmt.Println("Start server")
+	//*debug
+	// fmt.Println("Start server")
 	go http.Serve(l, nil)
 }
 
@@ -128,19 +204,45 @@ func (c *Coordinator) server(sockname string) {
 func (c *Coordinator) Done() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.aliveWorker == 0 && c.inputIdx == len(c.inputFile) {
+	if c.aliveWorker == 0 && c.allReduceDone {
+		//*debug
+		// fmt.Println("Coordinator done")
 		return true
 	}
 	return false
+}
+
+func (c *Coordinator) checkWorkerStatus() {
+	for {
+		time.Sleep(time.Second)
+		c.mu.Lock()
+		for _, worker := range c.workerList {
+			//*debug
+			// fmt.Printf("The worker %v\n", worker)
+			if time.Now().After(worker.deadLine) && worker.status != Exit {
+				//*debug
+				// fmt.Printf("Worker%v died with task%v\n", worker.workerId, worker.taskId)
+				c.failTaskFiles = append(c.failTaskFiles, Task{worker.taskId, worker.status, worker.files})
+				c.workerList[worker.workerId].status = Exit
+				c.aliveWorker--
+			}
+		}
+		c.mu.Unlock()
+	}
 }
 
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator {
-	c := Coordinator{inputFile: files, nReduce: nReduce, intermediateFiles: make(map[int][]string)}
-	// *Debug
-	//fmt.Println("create coordinator")
+	c := Coordinator{
+		inputFile:         files,
+		nReduce:           nReduce,
+		intermediateFiles: make(map[int][]string),
+	}
+	//*debug
+	// fmt.Println("create coordinator")
 	c.server(sockname)
+	go c.checkWorkerStatus()
 	return &c
 }

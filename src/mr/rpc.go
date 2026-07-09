@@ -37,12 +37,14 @@ type WorkerArgs struct {
 	Status         Status
 	IsFirstCall    bool
 	InterFileNames []string
+	WorkerId       int
 }
 
 // Worker RPC reply
 type WorkerReply struct {
-	Status  Status
-	TaskId  int
-	Files   []string
-	NReduce int
+	Status   Status
+	WorkerId int
+	TaskId   int
+	Files    []string
+	NReduce  int
 }
