@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"log/slog"
 	"net/rpc"
 	"os"
 	"sort"
+
+	_ "6.5840/config"
 )
 
 // Map functions return a slice of KeyValue.
@@ -16,6 +19,7 @@ type KeyValue struct {
 	Value string
 }
 
+// Implements for the sort.Interface
 type KVList []KeyValue
 
 func (kv KVList) Len() int           { return len(kv) }
@@ -34,18 +38,13 @@ var coordSockName string // socket for coordinator
 var nReduce int
 
 func writeIntermediate(kvs []KeyValue, taskId int) []string {
-	// Write all kvs to file to avoid open the file repeatedly
-	//*debug
-	// fmt.Println("Get in writeIntermediate")
+	// Store all kvs in a map to avoid open the file repeatedly
 	fileToContent := make(map[string]([]KeyValue))
 	for _, kv := range kvs {
 		reducerId := ihash(kv.Key) % nReduce
 		filename := fmt.Sprintf("mr-%v-%v", taskId, reducerId)
 		fileToContent[filename] = append(fileToContent[filename], kv)
 	}
-	//*debug
-	// time.Sleep(time.Second)
-	// fmt.Println("Finish fileToContent map")
 	interFileNames := []string{}
 	for filename, kvs := range fileToContent {
 		interFileNames = append(interFileNames, filename)
@@ -64,8 +63,6 @@ func writeIntermediate(kvs []KeyValue, taskId int) []string {
 			log.Fatal(err)
 		}
 	}
-	//*debug
-	// fmt.Println("Finish create and write to temp file")
 	return interFileNames
 }
 
@@ -98,17 +95,16 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 		if !ok {
 			log.Fatalf("RPC call failure")
 		} else {
-			// Run the task
 			if reply.Status == Wait {
 				args = WorkerArgs{Status: Wait, WorkerId: reply.WorkerId}
 				continue
 			}
+			// Do the task
 			files := reply.Files
 			nReduce = reply.NReduce
 			switch reply.Status {
 			case MapTask:
-				//*debug
-				// fmt.Printf("Worker %v start map task%v\n", reply.WorkerId, reply.TaskId)
+				slog.Debug("Start map task", "worker_id", reply.WorkerId, "task_id", reply.TaskId)
 				// Iterate all files
 				kvs := []KeyValue{}
 				for _, filename := range files {
@@ -123,42 +119,36 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 				// Generate temporary file for reduce worker
 				interFileNames := writeIntermediate(kvs, reply.TaskId)
 				args = WorkerArgs{Status: MapDone, InterFileNames: interFileNames, WorkerId: reply.WorkerId}
-				//*debug
-				// fmt.Printf("Map task %v done\n", reply.TaskId)
+				slog.Debug("Map task done", "worker_id", reply.WorkerId, "task_id", reply.TaskId)
 			case ReduceTask:
-				//*debug
-				// fmt.Printf("Worker %v start reduce task%v\n", reply.WorkerId, reply.TaskId)
+				slog.Debug("Start reduce task", "worker_id", reply.WorkerId, "task_id", reply.TaskId)
+				// Read files
 				interFileNames := reply.Files
 				reducerId := reply.TaskId
 				kvs := readFromInterFiles(interFileNames)
-				//*debug
-				//fmt.Println(kvs)
+				// Sort it
 				sort.Sort(KVList(kvs))
+				// Construct the args for reducef
 				keyToAllValues := make(map[string][]string)
 				for _, kv := range kvs {
 					keyToAllValues[kv.Key] = append(keyToAllValues[kv.Key], kv.Value)
 				}
-				//*debug
-				// fmt.Println(keyToAllValues)
 				oFile, err := os.Create(fmt.Sprintf("mr-out-%v", reducerId))
 				if err != nil {
 					log.Fatalf("Create file %v fail\n", oFile)
 				}
+				// Do the reducef
 				for k, vs := range keyToAllValues {
 					res := reducef(k, vs)
 					fmt.Fprintf(oFile, "%v %v\n", k, res)
 				}
 				args = WorkerArgs{Status: ReduceDone, WorkerId: reply.WorkerId}
-				//*debug
-				// fmt.Printf("Reduce task %v done\n", reply.TaskId)
+				slog.Debug("Reduce task done", "worker_id", reply.WorkerId, "task_id", reply.TaskId)
 			case Exit:
 				os.Exit(0)
 			}
 		}
 	}
-	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
-
 }
 
 // example function to show how to make an RPC call to the coordinator.

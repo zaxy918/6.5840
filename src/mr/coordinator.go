@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -12,43 +13,45 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	_ "6.5840/config"
 )
 
-const (
-	MAX_WORKER  = 10
-	EXPIRE_TIME = 10 * time.Second
-)
+// The task expire after 10 seconds from the time it was asigned
+func getExpireTime() time.Time { return time.Now().Add(time.Second * 10) }
 
+// For coordinator to keep track on the status of workers
 type WorkerEntry struct {
 	status   Status
-	workerId int
-	files    []string
-	deadLine time.Time
-	taskId   int
+	workerId int       // Assigned when the worker do its first rpc
+	files    []string  // The files the worker was assigned, inputfiles or intermediate files
+	deadLine time.Time // When the worker should be considered as died
+	taskId   int       // Assigned when the worker is assigned a task
 }
 
+// To record a failed task
 type Task struct {
-	taskId int
-	status Status
-	files  []string
+	taskId int      // Defined when the task was first assigned, corresponding with the taskId in WorkerEntry
+	status Status   // Reduce task or map task
+	files  []string // Input files or intermediate files
 }
 
 type Coordinator struct {
 	mu                sync.Mutex
 	cond              *sync.Cond
-	workerId          int
+	workerId          int // Auto-increment
 	allMapDone        bool
 	allReduceDone     bool
-	interFileCnt      int
+	interFileCnt      int // To record how many intermediate files can be assigned
 	nReduce           int
-	aliveWorker       int
-	taskId            int
-	mapperCnt         int
-	reducerCnt        int
+	aliveWorker       int // Count the worker that still aslive
+	taskId            int // Auto-increment, and be initialized as 0 in both map phase and reduce phase
+	mapperCnt         int // Count the mappers
+	reducerCnt        int // Count the reducers
 	inputFile         []string
 	intermediateFiles map[int][]string
 	workerList        []WorkerEntry
-	failTaskFiles     []Task
+	failTask          []Task
 }
 
 func (c *Coordinator) replyAndSetWorkerList(worker *WorkerEntry, reply *WorkerReply) {
@@ -60,6 +63,7 @@ func (c *Coordinator) Assign(args *WorkerArgs, reply *WorkerReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	worker := WorkerEntry{status: args.Status, workerId: args.WorkerId}
+	// When the worker first do rpc, something should be initialized
 	if args.IsFirstCall {
 		worker.workerId = c.workerId
 		worker.taskId = -1
@@ -67,76 +71,79 @@ func (c *Coordinator) Assign(args *WorkerArgs, reply *WorkerReply) error {
 		c.workerId++
 		c.aliveWorker++
 	}
+	// The worker now is marked dead
 	if c.workerList[worker.workerId].status == Exit {
-		worker = WorkerEntry{Exit, worker.workerId, nil, time.Now().Add(EXPIRE_TIME), -1}
+		worker = WorkerEntry{Exit, worker.workerId, nil, getExpireTime(), -1}
 		c.replyAndSetWorkerList(&worker, reply)
 		return nil
 	}
+	// The main logic of assigning tasks depending on the status that the worker send in rpc args
 	switch worker.status {
 	case Wait:
 		switch {
-		case len(c.failTaskFiles) > 0:
-			task := c.failTaskFiles[0]
-			//*debug
-			// fmt.Printf("Worker%v continue failed task%v\n", worker.workerId, task.taskId)
-			expireTime := time.Now().Add(EXPIRE_TIME)
-			worker = WorkerEntry{task.status, worker.workerId, task.files, expireTime, task.taskId}
+		// Some files has failed
+		case len(c.failTask) > 0:
+			// Take the task out
+			task := c.failTask[0]
+			c.failTask = c.failTask[1:]
+			// Assign to worker
+			slog.Debug("Continue failed task", "worker_id", worker.workerId, "task_id", task.taskId)
+			worker = WorkerEntry{task.status, worker.workerId, task.files, getExpireTime(), task.taskId}
 			c.replyAndSetWorkerList(&worker, reply)
-			c.failTaskFiles = c.failTaskFiles[1:]
+		// Map phase
 		case !c.allMapDone && len(c.inputFile) > 0:
-			// Have files to assign
-			//*debug
-			// fmt.Printf("Assign a map task with taskId=%v\n", c.taskId)
-			expireTime := time.Now().Add(EXPIRE_TIME)
-			worker = WorkerEntry{MapTask, worker.workerId, []string{c.inputFile[0]}, expireTime, c.taskId}
-			c.replyAndSetWorkerList(&worker, reply)
+			slog.Debug("Assign map task", "task_id", c.taskId, "worker_id", worker.workerId)
+			// Take the input file out
+			fiilename := c.inputFile[0]
 			c.inputFile = c.inputFile[1:]
+			// Assign to worker
+			worker = WorkerEntry{MapTask, worker.workerId, []string{fiilename}, getExpireTime(), c.taskId}
+			c.replyAndSetWorkerList(&worker, reply)
+			// Some state update
 			c.mapperCnt++
 			c.taskId++
-			//*debug
-			// fmt.Println(reply)
-			// No files to assign
+		// Reduce phase
 		case c.interFileCnt > 0 && c.allMapDone:
-			//*debug
-			// fmt.Printf("Assign a reduce task with taskId=%v\n", c.taskId)
+			slog.Debug("Assign reduce task", "task_id", c.taskId, "worker_id", worker.workerId)
+			// Take the intermediate files out
 			interFileNames := c.intermediateFiles[c.taskId]
-			expireTime := time.Now().Add(EXPIRE_TIME)
-			worker = WorkerEntry{ReduceTask, worker.workerId, interFileNames, expireTime, c.taskId}
-			c.replyAndSetWorkerList(&worker, reply)
 			c.interFileCnt -= len(c.intermediateFiles[c.taskId])
+			worker = WorkerEntry{ReduceTask, worker.workerId, interFileNames, getExpireTime(), c.taskId}
+			c.replyAndSetWorkerList(&worker, reply)
+			// Some state update
 			c.taskId++
 			c.reducerCnt++
 		case c.allReduceDone:
+			// All work done, wake the waiting worker to exit
 			c.cond.Broadcast()
-			//*debug
-			// fmt.Println("Kill worker")
-			c.aliveWorker--
-			worker.status = Exit
-			c.replyAndSetWorkerList(&worker, reply)
+			slog.Debug("Kill worker")
+			// All worker exit, clean the intermediate files
 			if c.aliveWorker == 0 {
-				//*debug
-				// fmt.Println("All worker killed, clean inter files")
+				slog.Debug("All worker killed, clean inter files")
 				for _, filenames := range c.intermediateFiles {
 					for _, filename := range filenames {
 						os.Remove(fmt.Sprintf("/tmp/%v", filename))
 					}
 				}
-				//*debug
-				// fmt.Println("All inter files cleaned, goodbye!")
+				slog.Debug("All inter files cleaned, goodbye!")
 			}
+			// Tell the worker to exit
+			worker.status = Exit
+			c.replyAndSetWorkerList(&worker, reply)
+			// State update
+			c.aliveWorker--
+		// No task to assign
 		default:
-			//*debug
-			// fmt.Println("No work, just wait")
+			slog.Debug("No work, just wait")
+			// Wait for all work done, some task fail, or all map done
 			c.cond.Wait()
-			expireTime := time.Now().Add(EXPIRE_TIME)
-			worker.deadLine = expireTime
+			// Reply to worker to start a new rpc
+			worker.deadLine = getExpireTime()
 			c.replyAndSetWorkerList(&worker, reply)
 		}
 	case MapDone:
-		//*debug
-		// fmt.Println("Maptask done, store inter file location")
-		c.mapperCnt--
-		c.interFileCnt += len(args.InterFileNames)
+		slog.Debug("Map task done, store intermediate file locations", "worker_id", worker.workerId)
+		// Store the intermediate files
 		for _, filename := range args.InterFileNames {
 			parts := strings.Split(filename, "-")
 			reducerId, err := strconv.Atoi(parts[len(parts)-1])
@@ -145,29 +152,28 @@ func (c *Coordinator) Assign(args *WorkerArgs, reply *WorkerReply) error {
 			}
 			c.intermediateFiles[reducerId] = append(c.intermediateFiles[reducerId], filename)
 		}
-		//*debug
-		// fmt.Println("Inter file stored")
+		slog.Debug("Stored intermediate file locations", "worker_id", worker.workerId)
+		// Some state update
+		c.mapperCnt--
+		c.interFileCnt += len(args.InterFileNames)
 		// All mappers done
-		// This is the last mapper and all files are handled
-		if c.mapperCnt == 0 && len(c.inputFile) == 0 && len(c.failTaskFiles) == 0 {
-			//*debug
-			// fmt.Println("All map work done")
+		if c.mapperCnt == 0 && len(c.inputFile) == 0 && len(c.failTask) == 0 {
+			slog.Debug("All map work done")
 			c.allMapDone = true
 			c.taskId = 0
 			c.cond.Broadcast()
 		}
-		expireTime := time.Now().Add(EXPIRE_TIME)
-		worker = WorkerEntry{Wait, worker.workerId, nil, expireTime, -1}
+		// Reply
+		worker = WorkerEntry{Wait, worker.workerId, nil, getExpireTime(), -1}
 		c.replyAndSetWorkerList(&worker, reply)
 	case ReduceDone:
 		c.reducerCnt--
-		if c.reducerCnt == 0 && c.interFileCnt == 0 && len(c.failTaskFiles) == 0 {
+		if c.reducerCnt == 0 && c.interFileCnt == 0 && len(c.failTask) == 0 {
 			c.allReduceDone = true
 		}
-		//*debug
-		// fmt.Println("One reduce task done")
-		expireTime := time.Now().Add(EXPIRE_TIME)
-		worker = WorkerEntry{Wait, worker.workerId, nil, expireTime, -1}
+		slog.Debug("Reduce task done", "worker_id", worker.workerId)
+		// Reply
+		worker = WorkerEntry{Wait, worker.workerId, nil, getExpireTime(), -1}
 		c.replyAndSetWorkerList(&worker, reply)
 	default:
 		return errors.New("invalid task status")
@@ -192,8 +198,7 @@ func (c *Coordinator) server(sockname string) {
 	if e != nil {
 		log.Fatalf("listen error %s: %v", sockname, e)
 	}
-	//*debug
-	// fmt.Println("Start server")
+	slog.Debug("Start rpc server")
 	go http.Serve(l, nil)
 }
 
@@ -203,26 +208,26 @@ func (c *Coordinator) Done() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.aliveWorker == 0 && c.allReduceDone {
-		//*debug
-		// fmt.Println("Coordinator done")
+		slog.Debug("Coordinator done")
 		return true
 	}
 	return false
 }
 
+// Try to find if some worker is dead
 func (c *Coordinator) checkWorkerStatus() {
 	for {
 		time.Sleep(time.Second)
 		c.mu.Lock()
 		for _, worker := range c.workerList {
-			//*debug
-			// fmt.Printf("The worker %v\n", worker)
+			slog.Debug("Check worker", "worker", worker)
 			if worker.status != Wait && time.Now().After(worker.deadLine) && worker.status != Exit {
-				//*debug
-				// fmt.Printf("Worker%v died with task%v\n", worker.workerId, worker.taskId)
-				c.failTaskFiles = append(c.failTaskFiles, Task{worker.taskId, worker.status, worker.files})
+				slog.Debug("Worker died", "worker_id", worker.workerId, "task_id", worker.taskId)
+				// Add fail task to list
+				c.failTask = append(c.failTask, Task{worker.taskId, worker.status, worker.files})
 				c.workerList[worker.workerId].status = Exit
 				c.aliveWorker--
+				// Tell the waiting worker to have task
 				c.cond.Broadcast()
 			}
 		}
@@ -240,9 +245,8 @@ func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator 
 		intermediateFiles: make(map[int][]string),
 	}
 	c.cond = sync.NewCond(&c.mu)
-	//*debug
-	// fmt.Println("create coordinator")
 	c.server(sockname)
 	go c.checkWorkerStatus()
+	slog.Debug("Create coordinator")
 	return &c
 }
