@@ -8,7 +8,6 @@ import (
 	"net/rpc"
 	"os"
 	"sort"
-	"time"
 )
 
 // Map functions return a slice of KeyValue.
@@ -102,7 +101,6 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			// Run the task
 			if reply.Status == Wait {
 				args = WorkerArgs{Status: Wait, WorkerId: reply.WorkerId}
-				time.Sleep(time.Millisecond * 50)
 				continue
 			}
 			files := reply.Files
