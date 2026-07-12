@@ -1,11 +1,14 @@
 package kvsrv
 
 import (
-	"6.5840/kvsrv1/rpc"
-	"6.5840/kvtest1"
-	"6.5840/tester1"
-)
+	"log/slog"
+	"time"
 
+	_ "6.5840/config"
+	"6.5840/kvsrv1/rpc"
+	kvtest "6.5840/kvtest1"
+	tester "6.5840/tester1"
+)
 
 type Clerk struct {
 	clnt   *tester.Clnt
@@ -29,8 +32,32 @@ func MakeClerk(clnt *tester.Clnt, server string) kvtest.IKVClerk {
 // must match the declared types of the RPC handler function's
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
-	// You will have to modify this function.
-	return "", 0, rpc.ErrNoKey
+	for {
+		// Construct args and reply
+		args := rpc.GetArgs{key}
+		reply := rpc.GetReply{}
+		// Do rpc
+		slog.Debug("Client call KVserver.Get", "args", args)
+		if ok := ck.clnt.Call(ck.server, "KVServer.Get", &args, &reply); ok {
+			switch reply.Err {
+			case rpc.OK:
+				slog.Debug("Client call KVServer.Get successfully", "value", reply.Value, "version", reply.Version)
+				return reply.Value, reply.Version, rpc.OK
+			case rpc.ErrNoKey:
+				slog.Debug("Client call KVServer.Get successfully with rpc.ErrNoKey")
+				return "", 0, reply.Err
+			default:
+				slog.Debug("Client call KVServer.Get successfully and do again", "error", reply.Err)
+				time.Sleep(time.Millisecond * 100)
+				continue
+			}
+		} else {
+			// Rpc not succeed
+			slog.Debug("Client call KVServer.Get fail, do again")
+			time.Sleep(time.Millisecond * 100)
+			continue
+		}
+	}
 }
 
 // Put updates key with value only if the version in the
@@ -51,6 +78,33 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 // must match the declared types of the RPC handler function's
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Put(key, value string, version rpc.Tversion) rpc.Err {
-	// You will have to modify this function.
-	return rpc.ErrNoKey
+	// If the client is first do the rpc
+	firstCall := true
+	for {
+		// Construct args and reply
+		args := rpc.PutArgs{key, value, version}
+		reply := rpc.PutReply{}
+		// Do rpc
+		slog.Debug("Client call KVServer.Put", "args", args)
+		if ok := ck.clnt.Call(ck.server, "KVServer.Put", &args, &reply); ok {
+			if !firstCall && reply.Err == rpc.ErrVersion {
+				// A resend call with ErrVersion
+				slog.Debug("Client recall KVServer.Put successful with ErrVersion, return ErrMaybe")
+				return rpc.ErrMaybe
+			} else {
+				slog.Debug("Client recall KVServer.Put successful", "reply.Err", reply.Err)
+				return reply.Err
+			}
+		} else if firstCall {
+			// Do call later
+			slog.Debug("Client first call KVServer.Put fail, do again")
+			time.Sleep(time.Millisecond * 100)
+			firstCall = false
+			continue
+		} else {
+			slog.Debug("Client recall KVServer.Put fail, return ErrMaybe")
+			// Two call fail
+			return rpc.ErrMaybe
+		}
+	}
 }
