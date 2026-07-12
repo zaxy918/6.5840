@@ -184,10 +184,10 @@ func (c *Coordinator) Assign(args *WorkerArgs, reply *WorkerReply) error {
 // an example RPC handler.
 //
 // the RPC argument and reply types are defined in rpc.go.
-func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
-	return nil
-}
+// func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
+// 	reply.Y = args.X + 1
+// 	return nil
+// }
 
 // start a thread that listens for RPCs from worker.go
 func (c *Coordinator) server(sockname string) {
