@@ -44,7 +44,7 @@ type Coordinator struct {
 	allReduceDone     bool
 	interFileCnt      int // To record how many intermediate files can be assigned
 	nReduce           int
-	aliveWorker       int // Count the worker that still aslive
+	aliveWorker       int // Count the worker that still alive
 	taskId            int // Auto-increment, and be initialized as 0 in both map phase and reduce phase
 	mapperCnt         int // Count the mappers
 	reducerCnt        int // Count the reducers
@@ -221,7 +221,7 @@ func (c *Coordinator) checkWorkerStatus() {
 		c.mu.Lock()
 		for _, worker := range c.workerList {
 			slog.Debug("Check worker", "worker", worker)
-			if worker.status != Wait && time.Now().After(worker.deadLine) && worker.status != Exit {
+			if (worker.status == MapTask || worker.status == ReduceTask) && time.Now().After(worker.deadLine) {
 				slog.Debug("Worker died", "worker_id", worker.workerId, "task_id", worker.taskId)
 				// Add fail task to list
 				c.failTask = append(c.failTask, Task{worker.taskId, worker.status, worker.files})
