@@ -4,7 +4,7 @@ package raftapi
 type Raft interface {
 	// Start agreement on a new log entry, and return the log index
 	// for that entry, the term, and whether the peer is the leader.
-	Start(command interface{}) (int, int, bool)
+	Start(command any) (int, int, bool)
 
 	// Ask a Raft for its current term, and whether it thinks it is
 	// leader
@@ -24,7 +24,7 @@ type Raft interface {
 // Exactly one of CommandValid and SnapshotValid should be true.
 type ApplyMsg struct {
 	CommandValid bool
-	Command      interface{}
+	Command      any
 	CommandIndex int
 
 	SnapshotValid bool
