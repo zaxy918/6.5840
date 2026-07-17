@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -40,14 +41,18 @@ func (h *SimpleHandler) Handle(_ context.Context, r slog.Record) error {
 	}
 	// 2. Short time format: HH:mm:ss
 	t := r.Time.Format(time.TimeOnly)
-	// 3. Concatenate all key-value attributes
-	fields := ""
+	// 3. Concatenate all key-value attributes in a more readable layout
+	fields := []string{}
 	r.Attrs(func(a slog.Attr) bool {
-		fields += fmt.Sprintf(" %s=%v", a.Key, a.Value.Any())
+		fields = append(fields, fmt.Sprintf("%s=%v", a.Key, a.Value.Any()))
 		return true
 	})
-	// Custom output format: [Time][Level] Message Fields
-	_, err := fmt.Fprintf(h.out, "%s %s %s %s\n", t, l, r.Message, fields)
+	// Custom output format: [Time][Level] Message | key=value | key=value
+	if len(fields) > 0 {
+		_, err := fmt.Fprintf(h.out, "%s %s %s | %s\n", t, l, r.Message, strings.Join(fields, " | "))
+		return err
+	}
+	_, err := fmt.Fprintf(h.out, "%s %s %s\n", t, l, r.Message)
 	return err
 }
 
@@ -60,6 +65,6 @@ func (h *SimpleHandler) WithGroup(string) slog.Handler { return h }
 // init set global default slog handler on package load
 func init() {
 	// Replace default handler with custom minimalist processor
-	handler := NewSimpleHandler(os.Stdout, slog.LevelInfo)
+	handler := NewSimpleHandler(os.Stdout, slog.LevelDebug)
 	slog.SetDefault(slog.New(handler))
 }
