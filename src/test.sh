@@ -63,7 +63,7 @@ if [ ! -f "${DAEMON_SOURCE}" ]; then
 fi
 
 mkdir -p "${LOG_DIR}"
-rm -f -- "${LOG_DIR}"/*.log
+
 echo "====================================="
 echo "Test filter pattern: -run ${TEST_FILTER}"
 echo "Test target: ${TEST_TARGET}"
@@ -88,7 +88,23 @@ declare -a ACTIVE_ROUNDS=()
 declare -a ACTIVE_LOGS=()
 declare -a LOG_FILE_LIST=()
 declare -A LOG_STATUS=()
+declare -A TEST_TOTAL_US=()
+declare -A TEST_RUN_COUNTS=()
 FAILED_ROUNDS=0
+
+collect_test_timings() {
+    local log_file="$1"
+    local test_name
+    local duration_seconds
+    local duration_us
+
+    while read -r test_name duration_seconds; do
+        [ -n "${test_name}" ] || continue
+        duration_us="$(awk -v seconds="${duration_seconds}" 'BEGIN { printf "%.0f", seconds * 1000000 }')"
+        TEST_TOTAL_US["${test_name}"]=$(( ${TEST_TOTAL_US["${test_name}"]:-0} + duration_us ))
+        TEST_RUN_COUNTS["${test_name}"]=$(( ${TEST_RUN_COUNTS["${test_name}"]:-0} + 1 ))
+    done < <(sed -nE 's/^--- (PASS|FAIL): ([^ ]+) \(([0-9.]+)s\)$/\2 \3/p' "${log_file}")
+}
 
 wait_for_job() {
     local pid="$1"
@@ -105,6 +121,7 @@ wait_for_job() {
         echo "[Round ${round}] FAIL (exit ${status}), log: ${log_file}"
     fi
 
+    collect_test_timings "${log_file}"
     LOG_STATUS["${log_file}"]="${status}"
 }
 
@@ -150,6 +167,21 @@ done
 echo ""
 echo "Passed rounds: $((RUN_TIMES - FAILED_ROUNDS))"
 echo "Failed rounds: ${FAILED_ROUNDS}"
+
+if [ "${#TEST_RUN_COUNTS[@]}" -gt 0 ]; then
+    echo ""
+    echo "Average time by test case:"
+    average_case_sum_us=0
+    while read -r test_name; do
+        average_us=$((TEST_TOTAL_US["${test_name}"] / TEST_RUN_COUNTS["${test_name}"]))
+        average_case_sum_us=$((average_case_sum_us + average_us))
+        average_seconds="$(awk -v microseconds="${average_us}" 'BEGIN { printf "%.3fs", microseconds / 1000000 }')"
+        printf "  %-40s %8s  (%d runs)\n" \
+            "${test_name}" "${average_seconds}" "${TEST_RUN_COUNTS["${test_name}"]}"
+    done < <(printf "%s\n" "${!TEST_RUN_COUNTS[@]}" | sort)
+    average_case_sum_seconds="$(awk -v microseconds="${average_case_sum_us}" 'BEGIN { printf "%.3fs", microseconds / 1000000 }')"
+    echo "Average time sum of all test cases: ${average_case_sum_seconds}"
+fi
 
 if [ "${FAILED_ROUNDS}" -ne 0 ]; then
     exit 1

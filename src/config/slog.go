@@ -65,6 +65,6 @@ func (h *SimpleHandler) WithGroup(string) slog.Handler { return h }
 // init set global default slog handler on package load
 func init() {
 	// Replace default handler with custom minimalist processor
-	handler := NewSimpleHandler(os.Stdout, slog.LevelDebug)
+	handler := NewSimpleHandler(os.Stdout, slog.LevelInfo)
 	slog.SetDefault(slog.New(handler))
 }
