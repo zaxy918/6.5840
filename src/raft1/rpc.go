@@ -43,7 +43,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		"candidate_last_log_index", args.LastLogIndex,
 		"candidate_last_log_term", args.LastLogTerm,
 	)
-	if args.Term <= rf.currentTerm {
+	if args.Term < rf.currentTerm || rf.votedFor != -1 && rf.currentTerm == args.Term {
 		slog.Debug("rejecting vote request because the candidate term is stale",
 			"peer_id", rf.me,
 			"candidate_id", args.CandidateId,
@@ -59,6 +59,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 				args.LastLogIndex >= rf.lastLogIndex())
 	rf.currentTerm = args.Term
 	rf.state = Follower
+	rf.votedFor = -1
 	if upToDate {
 		slog.Debug("granting vote to candidate",
 			"peer_id", rf.me,
@@ -82,42 +83,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		)
 		*reply = RequestVoteReply{Term: rf.currentTerm, VoteGranted: false}
 	}
-	// switch {
-	// case args.Term <= rf.getCurTerm():
-	// 	slog.Debug("rejecting vote request because the candidate term is stale",
-	// 		"peer_id", rf.me,
-	// 		"candidate_id", args.CandidateId,
-	// 		"candidate_term", args.Term,
-	// 		"local_term", rf.getCurTerm(),
-	// 	)
-	// 	*reply = RequestVoteReply{Term: rf.getCurTerm(), VoteGranted: false}
-	// case args.LastLogTerm < rf.getLastLogTerm():
-	// 	slog.Debug("rejecting vote request because the candidate log is older",
-	// 		"peer_id", rf.me,
-	// 		"candidate_id", args.CandidateId,
-	// 		"candidate_last_log_term", args.LastLogTerm,
-	// 		"local_last_log_term", rf.getLastLogTerm(),
-	// 	)
-	// 	*reply = RequestVoteReply{Term: rf.getCurTerm(), VoteGranted: false}
-	// case args.LastLogIndex < rf.getLastLogIndex():
-	// 	slog.Debug("rejecting vote request because the candidate log is shorter",
-	// 		"peer_id", rf.me,
-	// 		"candidate_id", args.CandidateId,
-	// 		"candidate_last_log_index", args.LastLogIndex,
-	// 		"local_last_log_index", rf.getLastLogIndex(),
-	// 	)
-	// 	*reply = RequestVoteReply{Term: rf.getCurTerm(), VoteGranted: false}
-	// default:
-	// 	rf.setVotedFor(args.CandidateId)
-	// 	rf.setCurTerm(args.Term)
-	// 	rf.setState(Follower)
-	// 	slog.Debug("granting vote to candidate",
-	// 		"peer_id", rf.me,
-	// 		"candidate_id", args.CandidateId,
-	// 		"term", rf.getCurTerm(),
-	// 	)
-	// 	*reply = RequestVoteReply{Term: rf.getCurTerm(), VoteGranted: true}
-	// }
 }
 
 type AppendEntriesArgs struct {

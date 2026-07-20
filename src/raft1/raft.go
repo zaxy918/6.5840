@@ -146,9 +146,9 @@ func (rf *Raft) sendRequestVote(server int, electionTerm int, votes chan bool, a
 	}
 }
 
-// The election timeout is 450 ~ 600ms
+// The election timeout is 300 ~ 450ms
 func electionTimeout() time.Duration {
-	return time.Duration((450 + rand.Int63()%150)) * time.Millisecond
+	return time.Duration((300 + rand.Int63()%150)) * time.Millisecond
 }
 
 func (rf *Raft) election() State {
@@ -407,7 +407,6 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 			return
 		}
 	}
-
 }
 
 func (rf *Raft) startAgreement(index, term int) {
