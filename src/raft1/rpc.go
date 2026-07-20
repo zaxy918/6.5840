@@ -1,10 +1,14 @@
 package raft
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"6.5840/raftapi"
+)
 
 type LogEntry struct {
-	Term int
-	Cmd  string
+	Term    int
+	Command any
 }
 
 type RequestVoteArgs struct {
@@ -17,25 +21,6 @@ type RequestVoteArgs struct {
 type RequestVoteReply struct {
 	Term        int  // currentTerm
 	VoteGranted bool // true if the cnadidate received vote
-}
-
-// shouldGrantVote returns true if the candidate has the newest state
-func (rf *Raft) shouldGrantVote(args *RequestVoteArgs) bool {
-	if args.Term <= rf.currentTerm {
-		return false
-	}
-	if args.LastLogTerm < func() int {
-		if len(rf.log) > 0 {
-			return rf.log[len(rf.log)-1].Term
-		}
-		return 0
-	}() {
-		return false
-	}
-	if args.LastLogIndex < len(rf.log) {
-		return false
-	}
-	return true
 }
 
 /*
@@ -58,21 +43,32 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		"candidate_last_log_index", args.LastLogIndex,
 		"candidate_last_log_term", args.LastLogTerm,
 	)
-	if rf.shouldGrantVote(args) {
+	if args.Term <= rf.currentTerm {
+		slog.Debug("rejecting vote request because the candidate term is stale",
+			"peer_id", rf.me,
+			"candidate_id", args.CandidateId,
+			"candidate_term", args.Term,
+			"local_term", rf.currentTerm,
+		)
+		*reply = RequestVoteReply{Term: rf.currentTerm, VoteGranted: false}
+		return
+	}
+	upToDate :=
+		args.LastLogTerm > rf.lastLogTerm() ||
+			(args.LastLogTerm == rf.lastLogTerm() &&
+				args.LastLogIndex >= rf.lastLogIndex())
+	rf.currentTerm = args.Term
+	rf.state = Follower
+	if upToDate {
 		slog.Debug("granting vote to candidate",
 			"peer_id", rf.me,
 			"candidate_id", args.CandidateId,
 			"term", rf.currentTerm,
 		)
 		rf.votedFor = args.CandidateId
-		rf.currentTerm = args.Term
-		if rf.state != Follower {
-			slog.Debug("the local state is not follower, changing to follower",
-				"peer_id", rf.me,
-				"candidate_id", args.CandidateId,
-				"term", rf.currentTerm,
-			)
-			rf.state = Follower
+		select {
+		case rf.heartBeatCh <- args.CandidateId:
+		default:
 		}
 		*reply = RequestVoteReply{Term: rf.currentTerm, VoteGranted: true}
 	} else {
@@ -181,20 +177,64 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			case rf.heartBeatCh <- args.LeaderId:
 			default:
 			}
-			slog.Debug("AppendEntries from a new leader, the local state is follower, accepting the request",
+			slog.Debug("accepting the request",
 				"peer_id", rf.me,
 				"leader_id", args.LeaderId,
 				"leader_term", args.Term,
 				"local_term", rf.currentTerm,
+				"commit_index", rf.commitIndex,
 			)
-			// TODO: Append the entries to the log
 			rf.currentTerm = args.Term
 			rf.leaderId = args.LeaderId
-			rf.state = Follower
-			if len(args.Entries) > 0 {
+			slog.Debug("appending entries",
+				"peer_id", rf.me,
+				"leader_id", args.LeaderId,
+				"leader_term", args.Term,
+				"local_term", rf.currentTerm,
+				"entries_len", len(args.Entries),
+			)
+			if args.PrevLogIndex > rf.lastLogIndex() || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+				slog.Debug("The local log does not contain an entry at prevLogIndex whose term matches prevLogTerm",
+					"peer_id", rf.me,
+					"leader_id", args.LeaderId,
+					"leader_term", args.Term,
+					"local_term", rf.currentTerm,
+					"prev_log_index", args.PrevLogIndex,
+					"prev_log_term", args.PrevLogTerm,
+				)
+				*reply = AppendEntriesReply{Term: rf.currentTerm, Success: false}
+			} else {
+				slog.Debug("The local log contains an entry at prevLogIndex whose term matches prevLogTerm, appending entries",
+					"peer_id", rf.me,
+					"leader_id", args.LeaderId,
+					"leader_term", args.Term,
+					"local_term", rf.currentTerm,
+					"prev_log_index", args.PrevLogIndex,
+					"prev_log_term", args.PrevLogTerm,
+				)
+				if len(args.Entries) > 0 {
+					for i, entry := range args.Entries {
+						if args.PrevLogIndex+i+1 > rf.lastLogIndex() || rf.log[args.PrevLogIndex+i+1].Term != entry.Term {
+							rf.log = append(rf.log[:args.PrevLogIndex+i+1], args.Entries[i:]...)
+						}
+					}
+				}
+				*reply = AppendEntriesReply{Term: rf.currentTerm, Success: true}
+				if args.LeaderCommit > rf.commitIndex {
+					lastCommitIndex := rf.commitIndex
+					rf.commitIndex = min(args.LeaderCommit, rf.lastLogIndex())
+					for i := lastCommitIndex + 1; i <= rf.commitIndex; i++ {
+						rf.lastApplied = i
+						rf.applyCh <- raftapi.ApplyMsg{
+							CommandValid: true,
+							Command:      rf.log[i].Command,
+							CommandIndex: i,
+						}
+					}
+				}
 			}
-			*reply = AppendEntriesReply{Term: rf.currentTerm, Success: true}
 		}
+
 	} else {
 		slog.Debug("AppendEntries from an old leader",
 			"peer_id", rf.me,

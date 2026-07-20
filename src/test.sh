@@ -86,8 +86,6 @@ echo "Building ${TEST_TARGET} daemon once..."
 declare -a ACTIVE_PIDS=()
 declare -a ACTIVE_ROUNDS=()
 declare -a ACTIVE_LOGS=()
-declare -a LOG_FILE_LIST=()
-declare -A LOG_STATUS=()
 declare -A TEST_TOTAL_US=()
 declare -A TEST_RUN_COUNTS=()
 FAILED_ROUNDS=0
@@ -122,13 +120,18 @@ wait_for_job() {
     fi
 
     collect_test_timings "${log_file}"
-    LOG_STATUS["${log_file}"]="${status}"
+
+    if [ "${status}" -eq 0 ]; then
+        rm -f -- "${log_file}"
+        echo "[Round ${round}] Removed passed log: ${log_file}"
+    else
+        echo "[Round ${round}] Reserved failed log: ${log_file}"
+    fi
 }
 
 for ((round = 1; round <= RUN_TIMES; round++)); do
     timestamp="$(date +"%Y%m%d_%H%M%S.%N")"
     log_file="${LOG_DIR}/debug_log_round${round}_${timestamp}.log"
-    LOG_FILE_LIST+=("${log_file}")
 
     echo "[Round ${round}] Starting, log: ${log_file}"
     (
@@ -153,18 +156,7 @@ for i in "${!ACTIVE_PIDS[@]}"; do
 done
 
 echo ""
-echo "All test rounds finished. Removing logs from passed rounds..."
-
-for log_file in "${LOG_FILE_LIST[@]}"; do
-    if [ "${LOG_STATUS[${log_file}]:-1}" -eq 0 ]; then
-        rm -f -- "${log_file}"
-        echo "Removed passed log: ${log_file}"
-    else
-        echo "Reserved failed log: ${log_file}"
-    fi
-done
-
-echo ""
+echo "All test rounds finished."
 echo "Passed rounds: $((RUN_TIMES - FAILED_ROUNDS))"
 echo "Failed rounds: ${FAILED_ROUNDS}"
 
