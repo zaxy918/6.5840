@@ -10,12 +10,14 @@ package raft
 
 import (
 	//	"bytes"
+	"bytes"
 	"log/slog"
 	"math/rand"
 	"sync"
 	"time"
 
 	//	"6.5840/labgob"
+	"6.5840/labgob"
 	"6.5840/labrpc"
 	"6.5840/raftapi"
 	tester "6.5840/tester1"
@@ -69,14 +71,13 @@ func (rf *Raft) lastLogTerm() int {
 // after you've implemented snapshots, pass the current snapshot
 // (or nil if there's not yet a snapshot).
 func (rf *Raft) persist() {
-	// Your code here (3C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// raftstate := w.Bytes()
-	// rf.persister.Save(raftstate, nil)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.log)
+	raftstate := w.Bytes()
+	rf.persister.Save(raftstate, nil)
 }
 
 // restore previously persisted state.
@@ -84,19 +85,20 @@ func (rf *Raft) readPersist(data []byte) {
 	if len(data) < 1 { // bootstrap without any state?
 		return
 	}
-	// Your code here (3C).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var votedFor int
+	var logEntries []LogEntry
+	if d.Decode(&currentTerm) != nil ||
+		d.Decode(&votedFor) != nil ||
+		d.Decode(&logEntries) != nil {
+		slog.Error("PERSIST", "PEER", rf.me, "EVENT", "READ_PERSIST_FAILED")
+	} else {
+		rf.currentTerm = currentTerm
+		rf.votedFor = votedFor
+		rf.log = logEntries
+	}
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -134,9 +136,9 @@ func (rf *Raft) sendRequestVote(server int, electionTerm int, votes chan bool, a
 	}
 }
 
-// The election timeout is 300 ~ 450ms
+// The election timeout is 500 ~ 800ms
 func electionTimeout() time.Duration {
-	return time.Duration((300 + rand.Int63()%150)) * time.Millisecond
+	return time.Duration((500 + rand.Int63()%300)) * time.Millisecond
 }
 
 func (rf *Raft) sendRequestVoteAll(term int, votes chan bool) {
@@ -166,6 +168,7 @@ func (rf *Raft) beCandidate() int {
 	rf.currentTerm = electionTerm
 	rf.votedFor = rf.me
 	rf.state = Candidate
+	rf.persist()
 	return electionTerm
 }
 
@@ -190,7 +193,7 @@ func (rf *Raft) beLeader() {
 func (rf *Raft) waitVotes(electionTerm int, votes chan bool) State {
 	cntYes := 1
 	cntNo := 0
-	voteTimeout := time.NewTimer(500 * time.Millisecond)
+	voteTimeout := time.NewTimer(time.Second)
 	defer voteTimeout.Stop()
 	for cntYes+cntNo < len(rf.peers) {
 		rf.mu.Lock()
@@ -227,7 +230,7 @@ func (rf *Raft) waitVotes(electionTerm int, votes chan bool) State {
 						"EVENT", "ELECTION_LOST",
 						"TERM", rf.currentTerm,
 					)
-					rf.state = Follower
+					rf.beFollower(rf.currentTerm)
 					return Follower
 				}
 			case <-voteTimeout.C:
@@ -239,7 +242,7 @@ func (rf *Raft) waitVotes(electionTerm int, votes chan bool) State {
 					"EVENT", "ELECTION_TIMEOUT",
 					"TERM", rf.currentTerm,
 				)
-				rf.stepDown(rf.currentTerm)
+				rf.beFollower(rf.currentTerm)
 				return Follower
 			}
 		} else {
@@ -339,9 +342,10 @@ func (rf *Raft) ticker() {
 	}
 }
 
-func (rf *Raft) stepDown(term int) {
+func (rf *Raft) beFollower(term int) {
 	rf.state = Follower
 	rf.currentTerm = term
+	rf.persist()
 	slog.Debug(
 		"STEP_DOWN",
 		"PEER", rf.me,
@@ -385,7 +389,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 					return
 				} else if reply.Term > args.Term {
 					defer rf.mu.Unlock()
-					rf.stepDown(reply.Term)
+					rf.beFollower(reply.Term)
 					return
 				} else {
 					rf.retryBack(server, args)
@@ -492,6 +496,7 @@ func (rf *Raft) Start(command any) (int, int, bool) {
 			Command: command,
 			Term:    rf.currentTerm,
 		})
+		rf.persist()
 		index := rf.lastLogIndex()
 		term := rf.currentTerm
 		go rf.startAgreement(index, term)

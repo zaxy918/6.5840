@@ -46,8 +46,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		args.LastLogTerm > rf.lastLogTerm() ||
 			(args.LastLogTerm == rf.lastLogTerm() &&
 				args.LastLogIndex >= rf.lastLogIndex())
-	rf.stepDown(args.Term)
 	rf.votedFor = -1
+	rf.beFollower(args.Term)
 	if upToDate {
 		slog.Debug(
 			"VOTE",
@@ -56,6 +56,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 			"TO", args.CandidateID,
 		)
 		rf.votedFor = args.CandidateID
+		rf.persist()
 		select {
 		case rf.heartBeatCh <- args.CandidateID:
 		default:
@@ -100,16 +101,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	if args.Term >= rf.currentTerm {
+		select {
+		case rf.heartBeatCh <- args.LeaderID:
+		default:
+		}
 		if rf.state != Follower {
-			rf.stepDown(args.Term)
+			rf.beFollower(args.Term)
 			rf.leaderID = args.LeaderID
 			*reply = AppendEntriesReply{Term: rf.currentTerm, Success: false}
 		} else {
-			select {
-			case rf.heartBeatCh <- args.LeaderID:
-			default:
-			}
 			rf.currentTerm = args.Term
+			rf.persist()
 			rf.leaderID = args.LeaderID
 			if args.PrevLogIndex > rf.lastLogIndex() || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 				slog.Debug(
@@ -131,6 +133,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 						}
 					}
 				}
+				rf.persist()
 				*reply = AppendEntriesReply{Term: rf.currentTerm, Success: true}
 				rf.applyLogEntries(rf.commitIndex+1, min(args.LeaderCommit, rf.lastLogIndex()))
 			}
