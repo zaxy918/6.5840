@@ -38,6 +38,7 @@ const (
 // Raft is a single Raft peer.
 type Raft struct {
 	mu        sync.Mutex            // Lock to protect shared access to this peer's state
+	cond      *sync.Cond            // Condition variable to signal when the state changes
 	peers     []*labrpc.ClientEnd   // RPC end points of all peers
 	persister *tester.Persister     // Object to hold this peer's persisted state
 	applyCh   chan raftapi.ApplyMsg // Channel to send newly committed log entries to the service (or tester)
@@ -53,14 +54,24 @@ type Raft struct {
 	nextIndex   []int // For each server, index of the next log entry to send to that server
 	matchIndex  []int // For each server, index of the highest log entry known to be replicated on server
 	heartBeatCh chan int
+	index0      int    // For snapshots
+	snapshot    []byte // The last snapshot
 }
 
 func (rf *Raft) lastLogIndex() int {
-	return len(rf.log) - 1
+	return rf.index0 + len(rf.log) - 1
 }
 
 func (rf *Raft) lastLogTerm() int {
-	return rf.log[rf.lastLogIndex()].Term
+	return rf.log[rf.lastLogIndex()-rf.index0].Term
+}
+
+func (rf *Raft) Logs(start, end int) []LogEntry {
+	return rf.log[start-rf.index0 : end-rf.index0]
+}
+
+func (rf *Raft) Log(index int) LogEntry {
+	return rf.log[index-rf.index0]
 }
 
 // save Raft's persistent state to stable storage,
@@ -73,11 +84,12 @@ func (rf *Raft) lastLogTerm() int {
 func (rf *Raft) persist() {
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
+	e.Encode(rf.index0)
 	e.Encode(rf.currentTerm)
 	e.Encode(rf.votedFor)
 	e.Encode(rf.log)
 	raftstate := w.Bytes()
-	rf.persister.Save(raftstate, nil)
+	rf.persister.Save(raftstate, rf.snapshot)
 }
 
 // restore previously persisted state.
@@ -89,13 +101,16 @@ func (rf *Raft) readPersist(data []byte) {
 	d := labgob.NewDecoder(r)
 	var currentTerm int
 	var votedFor int
+	var index int
 	var logEntries []LogEntry
-	if d.Decode(&currentTerm) != nil ||
+	if d.Decode(&index) != nil ||
+		d.Decode(&currentTerm) != nil ||
 		d.Decode(&votedFor) != nil ||
 		d.Decode(&logEntries) != nil {
 		slog.Error("PERSIST", "PEER", rf.me, "EVENT", "READ_PERSIST_FAILED")
 	} else {
 		rf.currentTerm = currentTerm
+		rf.index0 = index
 		rf.votedFor = votedFor
 		rf.log = logEntries
 	}
@@ -274,9 +289,9 @@ func (rf *Raft) sendAppendAll(term int) {
 			args := AppendEntriesArgs{
 				Term:         term,
 				LeaderID:     rf.me,
-				Entries:      append([]LogEntry{}, rf.log[rf.nextIndex[server]:]...),
+				Entries:      append([]LogEntry{}, rf.Logs(rf.nextIndex[server], rf.lastLogIndex()+1)...),
 				PrevLogIndex: rf.nextIndex[server] - 1,
-				PrevLogTerm:  rf.log[rf.nextIndex[server]-1].Term,
+				PrevLogTerm:  rf.Log(rf.nextIndex[server] - 1).Term,
 				LeaderCommit: rf.commitIndex,
 			}
 			reply := AppendEntriesReply{}
@@ -361,19 +376,19 @@ func (rf *Raft) retryBack(server int, args *AppendEntriesArgs) {
 		"EVENT", "APPEND_ENTRIES_RETRY",
 		"FOR", server,
 	)
-	for index := args.PrevLogIndex - 1; index >= 0; index-- {
-		if index == 0 {
-			rf.nextIndex[server] = 1
+	for index := args.PrevLogIndex - 1; index >= rf.index0; index-- {
+		if index == rf.index0 {
+			rf.nextIndex[server] = rf.index0 + 1
 			break
 		}
-		if rf.log[index].Term != rf.log[index+1].Term {
+		if rf.Log(index).Term != rf.Log(index+1).Term {
 			rf.nextIndex[server] = index
 			break
 		}
 	}
 	args.PrevLogIndex = rf.nextIndex[server] - 1
-	args.PrevLogTerm = rf.log[args.PrevLogIndex].Term
-	args.Entries = append([]LogEntry{}, rf.log[rf.nextIndex[server]:]...)
+	args.PrevLogTerm = rf.Log(args.PrevLogIndex).Term
+	args.Entries = append([]LogEntry{}, rf.Logs(rf.nextIndex[server], rf.lastLogIndex()+1)...)
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -392,6 +407,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 					rf.beFollower(reply.Term)
 					return
 				} else {
+					*reply = AppendEntriesReply{}
 					rf.retryBack(server, args)
 					rf.mu.Unlock()
 				}
@@ -405,17 +421,24 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	}
 }
 
-func (rf *Raft) applyLogEntries(start, end int) {
-	if start <= end {
-		for i := start; i <= end; i++ {
-			rf.lastApplied = i
+func (rf *Raft) applyLogEntries() {
+	for {
+		rf.mu.Lock()
+		for rf.lastApplied >= rf.commitIndex {
+			rf.cond.Wait()
+		}
+		start := rf.lastApplied + 1
+		end := rf.commitIndex
+		entries := append([]LogEntry{}, rf.Logs(start, end+1)...)
+		rf.lastApplied = end
+		rf.mu.Unlock()
+		for i, entry := range entries {
 			rf.applyCh <- raftapi.ApplyMsg{
 				CommandValid: true,
-				Command:      rf.log[i].Command,
-				CommandIndex: i,
+				Command:      entry.Command,
+				CommandIndex: start + i,
 			}
 		}
-		rf.commitIndex = end
 	}
 }
 
@@ -441,7 +464,10 @@ func (rf *Raft) waitMajorityAgreement(index, term int) {
 					"INDEX", index,
 					"TERM", term,
 				)
-				rf.applyLogEntries(rf.commitIndex+1, index)
+				if index > rf.commitIndex {
+					rf.commitIndex = index
+					rf.cond.Broadcast()
+				}
 				return
 			}
 			time.Sleep(50 * time.Millisecond)
@@ -520,7 +546,22 @@ func (rf *Raft) PersistBytes() int {
 // service no longer needs the log through (and including)
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
-	// Your code here (3D).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	slog.Debug(
+		"SNAPSHOT",
+		"PEER", rf.me,
+		"EVENT", "SNAPSHOT_CREATED",
+		"INDEX", index,
+		"RF_INDEX", rf.index0,
+	)
+	if index <= rf.index0 || index > rf.commitIndex {
+		return
+	}
+	rf.snapshot = append([]byte{}, snapshot...)
+	rf.log = append([]LogEntry{}, rf.Logs(index, rf.lastLogIndex()+1)...)
+	rf.index0 = index
+	rf.persist()
 }
 
 // Make must return quickly, so it should start goroutines
@@ -546,12 +587,14 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *tester.Persister, applyC
 	rf.applyCh = applyCh
 	rf.heartBeatCh = make(chan int, 1)
 	rf.state = Follower
+	rf.index0 = 0
+	rf.cond = sync.NewCond(&rf.mu)
 	rf.log = make([]LogEntry, 1) // log starts at index 1
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
-
+	rf.snapshot = persister.ReadSnapshot()
 	// start ticker goroutine to start elections
 	go rf.ticker()
-
+	go rf.applyLogEntries()
 	return rf
 }

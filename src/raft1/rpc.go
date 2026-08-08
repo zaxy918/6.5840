@@ -113,7 +113,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			rf.currentTerm = args.Term
 			rf.persist()
 			rf.leaderID = args.LeaderID
-			if args.PrevLogIndex > rf.lastLogIndex() || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+			if args.PrevLogIndex > rf.lastLogIndex() || rf.Log(args.PrevLogIndex).Term != args.PrevLogTerm {
 				slog.Debug(
 					"APPEND",
 					"PEER", rf.me,
@@ -128,14 +128,15 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				)
 				if len(args.Entries) > 0 {
 					for i, entry := range args.Entries {
-						if args.PrevLogIndex+i+1 > rf.lastLogIndex() || rf.log[args.PrevLogIndex+i+1].Term != entry.Term {
-							rf.log = append(rf.log[:args.PrevLogIndex+i+1], args.Entries[i:]...)
+						if args.PrevLogIndex+i+1 > rf.lastLogIndex() || rf.Log(args.PrevLogIndex+i+1).Term != entry.Term {
+							rf.log = append(rf.Logs(rf.index0, args.PrevLogIndex+i+1), args.Entries[i:]...)
 						}
 					}
 				}
 				rf.persist()
 				*reply = AppendEntriesReply{Term: rf.currentTerm, Success: true}
-				rf.applyLogEntries(rf.commitIndex+1, min(args.LeaderCommit, rf.lastLogIndex()))
+				rf.commitIndex = min(args.LeaderCommit, rf.lastLogIndex())
+				rf.cond.Broadcast()
 			}
 		}
 	} else {
