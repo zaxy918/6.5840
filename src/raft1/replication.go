@@ -22,53 +22,53 @@ type AppendEntriesReply struct {
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	if args.Term >= rf.currentTerm {
-		select {
-		case rf.heartBeatCh <- args.LeaderID:
-		default:
-		}
-		if rf.state != Follower {
-			rf.beFollower(args.Term)
-			rf.leaderID = args.LeaderID
-			*reply = AppendEntriesReply{Term: rf.currentTerm, Success: false}
-		} else {
-			rf.currentTerm = args.Term
-			rf.persist()
-			rf.leaderID = args.LeaderID
-			if args.PrevLogIndex > rf.lastLogIndex() || rf.Log(args.PrevLogIndex).Term != args.PrevLogTerm {
-				slog.Debug(
-					"APPEND",
-					"PEER", rf.me,
-					"EVENT", "SHOULD_RETRY",
-				)
-				*reply = AppendEntriesReply{Term: rf.currentTerm, Success: false}
-			} else {
-				slog.Debug(
-					"APPEND",
-					"PEER", rf.me,
-					"EVENT", "APPENDING",
-				)
-				if len(args.Entries) > 0 {
-					for i, entry := range args.Entries {
-						if args.PrevLogIndex+i+1 > rf.lastLogIndex() || rf.Log(args.PrevLogIndex+i+1).Term != entry.Term {
-							rf.log = append(rf.Logs(rf.index0, args.PrevLogIndex+i+1), args.Entries[i:]...)
-						}
-					}
-				}
-				rf.persist()
-				*reply = AppendEntriesReply{Term: rf.currentTerm, Success: true}
-				rf.commitIndex = min(args.LeaderCommit, rf.lastLogIndex())
-				rf.cond.Broadcast()
-			}
-		}
-	} else {
+	// old leader
+	if args.Term < rf.currentTerm {
+		*reply = AppendEntriesReply{Term: rf.currentTerm, Success: false}
+		return
+	}
+	// update heartbeat
+	select {
+	case rf.heartBeatCh <- args.LeaderID:
+	default:
+	}
+	// become follower if not already
+	if rf.state != Follower {
+		rf.beFollower(args.Term)
+		rf.leaderID = args.LeaderID
+		*reply = AppendEntriesReply{Term: rf.currentTerm, Success: false}
+		return
+	}
+	// update term and leaderID
+	rf.currentTerm = args.Term
+	rf.leaderID = args.LeaderID
+	rf.persist()
+	// not matching, retry
+	if args.PrevLogIndex > rf.lastLogIndex() || rf.Log(args.PrevLogIndex).Term != args.PrevLogTerm {
 		slog.Debug(
 			"APPEND",
 			"PEER", rf.me,
-			"EVENT", "OLD_LEADER",
+			"EVENT", "SHOULD_RETRY",
 		)
 		*reply = AppendEntriesReply{Term: rf.currentTerm, Success: false}
+		return
 	}
+	slog.Debug(
+		"APPEND",
+		"PEER", rf.me,
+		"EVENT", "APPENDING",
+	)
+	if len(args.Entries) > 0 {
+		for i, entry := range args.Entries {
+			if args.PrevLogIndex+i+1 > rf.lastLogIndex() || rf.Log(args.PrevLogIndex+i+1).Term != entry.Term {
+				rf.log = append(rf.Logs(rf.index0, args.PrevLogIndex+i+1), args.Entries[i:]...)
+			}
+		}
+	}
+	rf.persist()
+	*reply = AppendEntriesReply{Term: rf.currentTerm, Success: true}
+	rf.commitIndex = min(args.LeaderCommit, rf.lastLogIndex())
+	rf.cond.Broadcast()
 }
 
 func (rf *Raft) sendAppendAll(term int) {
@@ -76,6 +76,7 @@ func (rf *Raft) sendAppendAll(term int) {
 		if server == rf.me {
 			continue
 		}
+		// apply logs
 		if rf.nextIndex[server] > rf.index0 {
 			args := AppendEntriesArgs{
 				Term:         term,
@@ -94,6 +95,7 @@ func (rf *Raft) sendAppendAll(term int) {
 			)
 			go rf.sendAppendEntries(server, &args, &reply)
 		} else {
+			// apply snapshot
 			args := InstallSnapshotArgs{
 				Term:              term,
 				LeaderID:          rf.me,
@@ -120,10 +122,12 @@ func (rf *Raft) retryBack(server int, args *AppendEntriesArgs) bool {
 		"EVENT", "APPEND_ENTRIES_RETRY",
 		"FOR", server,
 	)
+	// too-left-behind
 	if rf.nextIndex[server] <= rf.index0+1 {
 		rf.nextIndex[server] = rf.index0
 		return false
 	}
+	// back off by one term
 	for index := args.PrevLogIndex - 1; index >= rf.index0; index-- {
 		if index == rf.index0 {
 			rf.nextIndex[server] = rf.index0 + 1
@@ -134,6 +138,7 @@ func (rf *Raft) retryBack(server int, args *AppendEntriesArgs) bool {
 			break
 		}
 	}
+	// update args
 	args.PrevLogIndex = rf.nextIndex[server] - 1
 	args.PrevLogTerm = rf.Log(args.PrevLogIndex).Term
 	args.Entries = append([]LogEntry{}, rf.Logs(rf.nextIndex[server], rf.lastLogIndex()+1)...)
@@ -142,33 +147,36 @@ func (rf *Raft) retryBack(server int, args *AppendEntriesArgs) bool {
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	for {
-		if ok := rf.peers[server].Call("Raft.AppendEntries", args, reply); ok {
-			rf.mu.Lock()
-			if rf.state == Leader && rf.currentTerm == args.Term {
-				if reply.Success {
-					defer rf.mu.Unlock()
-					// Update nextIndex and matchIndex for the server
-					rf.nextIndex[server] = max(args.PrevLogIndex+len(args.Entries)+1, rf.nextIndex[server])
-					rf.matchIndex[server] = max(rf.matchIndex[server], rf.nextIndex[server]-1)
-					return
-				} else if reply.Term > args.Term {
-					defer rf.mu.Unlock()
-					rf.beFollower(reply.Term)
-					return
-				} else {
-					*reply = AppendEntriesReply{}
-					if !rf.retryBack(server, args) {
-						rf.mu.Unlock()
-						return
-					}
-					rf.mu.Unlock()
-				}
-			} else {
+		// Send the append entries request
+		if ok := rf.peers[server].Call("Raft.AppendEntries", args, reply); !ok {
+			return
+		}
+		rf.mu.Lock()
+		// not current leader
+		if rf.state != Leader || rf.currentTerm != args.Term {
+			rf.mu.Unlock()
+			return
+		}
+		// old term
+		if reply.Term > args.Term {
+			defer rf.mu.Unlock()
+			rf.beFollower(reply.Term)
+			return
+		}
+		// append success
+		if reply.Success {
+			defer rf.mu.Unlock()
+			// Update nextIndex and matchIndex for the server
+			rf.nextIndex[server] = max(args.PrevLogIndex+len(args.Entries)+1, rf.nextIndex[server])
+			rf.matchIndex[server] = max(rf.matchIndex[server], rf.nextIndex[server]-1)
+			return
+		} else {
+			*reply = AppendEntriesReply{}
+			if !rf.retryBack(server, args) {
 				rf.mu.Unlock()
 				return
 			}
-		} else {
-			return
+			rf.mu.Unlock()
 		}
 	}
 }
@@ -177,35 +185,36 @@ func (rf *Raft) waitMajorityAgreement(index, term int) {
 	var cntYes int
 	for {
 		rf.mu.Lock()
-		if rf.currentTerm == term && rf.state == Leader {
-			cntYes = 1
-			for server := range rf.peers {
-				if server != rf.me && rf.matchIndex[server] >= index {
-					cntYes++
-				}
-			}
-			rf.mu.Unlock()
-			if cntYes > len(rf.peers)/2 {
-				rf.mu.Lock()
-				defer rf.mu.Unlock()
-				slog.Debug(
-					"AGREEMENT",
-					"PEER", rf.me,
-					"EVENT", "AGREEMENT_REACHED",
-					"INDEX", index,
-					"TERM", term,
-				)
-				if index > rf.commitIndex {
-					rf.commitIndex = index
-					rf.cond.Broadcast()
-				}
-				return
-			}
-			time.Sleep(50 * time.Millisecond)
-		} else {
+		if rf.currentTerm != term || rf.state != Leader {
 			rf.mu.Unlock()
 			return
 		}
+		cntYes = 1
+		// count agreed servers
+		for server := range rf.peers {
+			if server != rf.me && rf.matchIndex[server] >= index {
+				cntYes++
+			}
+		}
+		rf.mu.Unlock()
+		// gain majority
+		if cntYes > len(rf.peers)/2 {
+			rf.mu.Lock()
+			defer rf.mu.Unlock()
+			slog.Debug(
+				"AGREEMENT",
+				"PEER", rf.me,
+				"EVENT", "AGREEMENT_REACHED",
+				"INDEX", index,
+				"TERM", term,
+			)
+			if index > rf.commitIndex {
+				rf.commitIndex = index
+				rf.cond.Broadcast()
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

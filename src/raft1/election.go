@@ -26,6 +26,7 @@ func electionTimeout() time.Duration {
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	// old candidate
 	if args.Term < rf.currentTerm || rf.votedFor != -1 && rf.currentTerm == args.Term {
 		slog.Debug(
 			"VOTE",
@@ -35,35 +36,32 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		*reply = RequestVoteReply{Term: rf.currentTerm, VoteGranted: false}
 		return
 	}
+	// if candidate up to date
 	upToDate :=
 		args.LastLogTerm > rf.lastLogTerm() ||
 			(args.LastLogTerm == rf.lastLogTerm() &&
 				args.LastLogIndex >= rf.lastLogIndex())
 	rf.votedFor = -1
 	rf.beFollower(args.Term)
-	if upToDate {
-		slog.Debug(
-			"VOTE",
-			"PEER", rf.me,
-			"EVENT", "GRANT_VOTE",
-			"TO", args.CandidateID,
-		)
-		rf.votedFor = args.CandidateID
-		rf.persist()
-		select {
-		case rf.heartBeatCh <- args.CandidateID:
-		default:
-		}
-		*reply = RequestVoteReply{Term: rf.currentTerm, VoteGranted: true}
-	} else {
-		slog.Debug(
-			"VOTE",
-			"PEER", rf.me,
-			"EVENT", "REJECT_VOTE",
-			"REASON", "NOT_UP_TO_DATE",
-		)
+	// not up to date
+	if !upToDate {
 		*reply = RequestVoteReply{Term: rf.currentTerm, VoteGranted: false}
+		return
 	}
+	// vote and update the vote status
+	slog.Debug(
+		"VOTE",
+		"PEER", rf.me,
+		"EVENT", "GRANT_VOTE",
+		"TO", args.CandidateID,
+	)
+	select {
+	case rf.heartBeatCh <- args.CandidateID:
+	default:
+	}
+	rf.votedFor = args.CandidateID
+	rf.persist()
+	*reply = RequestVoteReply{Term: rf.currentTerm, VoteGranted: true}
 }
 
 func (rf *Raft) waitVotes(electionTerm int, votes chan bool) State {
@@ -144,12 +142,11 @@ func (rf *Raft) election() State {
 	return rf.waitVotes(electionTerm, votes)
 }
 
-func (rf *Raft) sendRequestVote(server int, electionTerm int, votes chan bool, args *RequestVoteArgs, reply *RequestVoteReply) {
-	if ok := rf.peers[server].Call("Raft.RequestVote", args, reply); ok {
-		if reply.Term == electionTerm {
-			votes <- reply.VoteGranted
-		}
+func (rf *Raft) sendRequestVote(server int, votes chan bool, args *RequestVoteArgs, reply *RequestVoteReply) {
+	if ok := rf.peers[server].Call("Raft.RequestVote", args, reply); !ok {
+		return
 	}
+	votes <- reply.VoteGranted
 }
 
 func (rf *Raft) sendRequestVoteAll(term int, votes chan bool) {
@@ -169,7 +166,7 @@ func (rf *Raft) sendRequestVoteAll(term int, votes chan bool) {
 				LastLogTerm:  rf.lastLogTerm(),
 			}
 			reply := RequestVoteReply{}
-			go rf.sendRequestVote(server, term, votes, &args, &reply)
+			go rf.sendRequestVote(server, votes, &args, &reply)
 		}
 	}
 }

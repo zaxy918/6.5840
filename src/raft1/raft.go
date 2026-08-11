@@ -10,19 +10,16 @@ package raft
 
 import (
 	//	"bytes"
-
 	"log/slog"
 	"sync"
 	"time"
 
 	//	"6.5840/labgob"
-
 	"6.5840/labrpc"
 	"6.5840/raftapi"
 	tester "6.5840/tester1"
 
 	// debug
-
 	_ "6.5840/config"
 )
 
