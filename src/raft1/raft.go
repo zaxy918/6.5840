@@ -53,9 +53,13 @@ type Raft struct {
 	index0          int               // For snapshots
 	snapshot        []byte            // The last snapshot
 	pendingSnapshot *raftapi.ApplyMsg // The pending snapshot
+	replicateCh     []chan struct{}   // Signals for each replicator
 }
 
 func (rf *Raft) beFollower(term int) {
+	if term > rf.currentTerm {
+		rf.votedFor = -1
+	}
 	rf.state = Follower
 	rf.currentTerm = term
 	rf.persist()
@@ -94,22 +98,34 @@ func (rf *Raft) beLeader() {
 	go rf.heartBeat()
 }
 
+func (rf *Raft) isCurrentLeader(argsTerm, replyTerm int) bool {
+	// newer term
+	if replyTerm > rf.currentTerm {
+		rf.beFollower(replyTerm)
+		return false
+	}
+	return rf.state == Leader && rf.currentTerm == argsTerm
+}
+
 func (rf *Raft) heartBeat() {
 	rf.mu.Lock()
 	leaderTerm := rf.currentTerm
 	rf.mu.Unlock()
 	for {
 		rf.mu.Lock()
-		if rf.state == Leader && rf.currentTerm == leaderTerm {
-			rf.sendAppendAll(leaderTerm)
-			rf.mu.Unlock()
-			// Do later
-			time.Sleep(150 * time.Millisecond)
-		} else {
+		if rf.state != Leader || rf.currentTerm != leaderTerm {
 			rf.mu.Unlock()
 			go rf.ticker()
 			return
 		}
+		for server := range rf.peers {
+			if server != rf.me {
+				go rf.replicate(server)
+			}
+		}
+		rf.mu.Unlock()
+		// Do later
+		time.Sleep(150 * time.Millisecond)
 	}
 }
 
@@ -170,6 +186,12 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *tester.Persister, applyC
 	rf.state = Follower
 	rf.cond = sync.NewCond(&rf.mu)
 	rf.log = make([]LogEntry, 1) // log starts at index 1
+	rf.replicateCh = make([]chan struct{}, len(peers))
+	for i := range peers {
+		if i != me {
+			rf.replicateCh[i] = make(chan struct{}, 1)
+		}
+	}
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 	rf.commitIndex = rf.index0
@@ -178,5 +200,10 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *tester.Persister, applyC
 	// start ticker goroutine to start elections
 	go rf.ticker()
 	go rf.applier()
+	for i := range peers {
+		if i != me {
+			go rf.replicator(i)
+		}
+	}
 	return rf
 }

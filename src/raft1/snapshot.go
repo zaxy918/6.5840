@@ -63,25 +63,22 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.cond.Broadcast()
 }
 
-func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
-	if ok := rf.peers[server].Call("Raft.InstallSnapshot", args, reply); !ok {
+func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply *InstallSnapshotReply) bool {
+	if !rf.peers[server].Call("Raft.InstallSnapshot", args, reply) {
 		slog.Debug(
 			"SNAPSHOT",
 			"PEER", rf.me,
 			"EVENT", "INSTALL_SNAPSHOT_RPC_FAILURE",
 			"TO", server,
 		)
-		return
+		return true
 	}
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	if reply.Term > rf.currentTerm {
-		rf.beFollower(reply.Term)
-		return
-	}
-	if rf.state != Leader || rf.currentTerm != args.Term {
-		return
+	if !rf.isCurrentLeader(args.Term, reply.Term) {
+		return false
 	}
 	rf.matchIndex[server] = max(rf.matchIndex[server], args.LastIncludedIndex)
 	rf.nextIndex[server] = max(rf.nextIndex[server], args.LastIncludedIndex+1)
+	return rf.nextIndex[server] <= rf.lastLogIndex()
 }
