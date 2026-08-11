@@ -1,0 +1,47 @@
+=====================================
+Test filter pattern: -run 
+Test target: raft1
+Total execution rounds: 1
+Maximum parallel jobs: 1
+Log storage directory: /home/zaxy/studyspace/projects/6.5840/src/debug_log
+=====================================
+Building raft1 daemon once...
+[Round 1] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round1_20260810_174249.318471476.log
+[Round 1] PASS
+[Round 1] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round1_20260810_174249.318471476.log
+
+All test rounds finished.
+Passed rounds: 1
+Failed rounds: 0
+
+Average statistics by test case:
+  Test case                                  Avg time   Peers   Avg RPCs    Avg Ops    Runs
+  TestInitialElection3A                        3.680s       3       40.0        0.0       1
+  TestReElection3A                             5.640s       3       90.0        0.0       1
+  TestManyElections3A                          8.530s       7      492.0        0.0       1
+  TestBasicAgree3B                             1.230s       3       16.0        3.0       1
+  TestRPCBytes3B                               2.540s       3       48.0       11.0       1
+  TestFollowerFailure3B                        5.380s       3       76.0        3.0       1
+  TestLeaderFailure3B                          5.860s       3      136.0        3.0       1
+  TestFailAgree3B                              6.200s       3       93.0        7.0       1
+  TestFailNoAgree3B                            4.340s       5      124.0        2.0       1
+  TestConcurrentStarts3B                       1.440s       3       24.0        0.0       1
+  TestRejoin3B                                 5.100s       3      114.0        4.0       1
+  TestBackup3B                                24.040s       5     1955.0      102.0       1
+  TestCount3B                                  2.810s       3       54.0        0.0       1
+  TestPersist13C                               5.550s       3       64.0        6.0       1
+  TestPersist23C                              25.730s       5      402.0       16.0       1
+  TestPersist33C                               2.660s       3       35.0        4.0       1
+  TestFigure83C                               43.040s       5      915.0        2.0       1
+  TestUnreliableAgree3C                        5.690s       5     1088.0      246.0       1
+  TestFigure8Unreliable3C                     40.890s       5     9656.0        2.0       1
+  TestReliableChurn3C                         18.090s       5     1427.0        1.0       1
+  TestUnreliableChurn3C                       17.730s       5     1794.0        1.0       1
+  TestSnapshotBasic3D                          5.960s       3      502.0       31.0       1
+  TestSnapshotInstall3D                       45.210s       3     1295.0       91.0       1
+  TestSnapshotInstallUnreliable3D             64.300s       3     1537.0       91.0       1
+  TestSnapshotInstallCrash3D                  39.570s       3     1136.0       91.0       1
+  TestSnapshotInstallUnCrash3D                48.350s       3     1236.0       91.0       1
+  TestSnapshotAllCrash3D                      17.500s       3      317.0       66.0       1
+  TestSnapshotInit3D                           5.070s       3       78.0       14.0       1
+Average time sum of all test cases: 462.130s

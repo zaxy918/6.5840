@@ -1,0 +1,74 @@
+=====================================
+Test filter pattern: -run 
+Test target: raft1
+Total execution rounds: 10
+Maximum parallel jobs: 5
+Log storage directory: /home/zaxy/studyspace/projects/6.5840/src/debug_log
+=====================================
+Building raft1 daemon once...
+[Round 1] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round1_20260811_133302.881902912.log
+[Round 2] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round2_20260811_133302.883053352.log
+[Round 3] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round3_20260811_133302.884341601.log
+[Round 4] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round4_20260811_133302.886225487.log
+[Round 5] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round5_20260811_133302.887827321.log
+[Round 1] PASS
+[Round 1] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round1_20260811_133302.881902912.log
+[Round 6] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round6_20260811_134115.689083656.log
+[Round 2] PASS
+[Round 2] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round2_20260811_133302.883053352.log
+[Round 7] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round7_20260811_134119.125193020.log
+[Round 3] PASS
+[Round 3] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round3_20260811_133302.884341601.log
+[Round 8] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round8_20260811_134119.186691737.log
+[Round 4] PASS
+[Round 4] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round4_20260811_133302.886225487.log
+[Round 9] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round9_20260811_134119.253249039.log
+[Round 5] PASS
+[Round 5] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round5_20260811_133302.887827321.log
+[Round 10] Starting, log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round10_20260811_134123.298928240.log
+[Round 6] PASS
+[Round 6] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round6_20260811_134115.689083656.log
+[Round 7] PASS
+[Round 7] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round7_20260811_134119.125193020.log
+[Round 8] PASS
+[Round 8] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round8_20260811_134119.186691737.log
+[Round 9] PASS
+[Round 9] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round9_20260811_134119.253249039.log
+[Round 10] PASS
+[Round 10] Removed passed log: /home/zaxy/studyspace/projects/6.5840/src/debug_log/debug_log_round10_20260811_134123.298928240.log
+
+All test rounds finished.
+Passed rounds: 10
+Failed rounds: 0
+
+Average statistics by test case:
+  Test case                                  Avg time   Peers   Avg RPCs    Avg Ops    Runs
+  TestInitialElection3A                        3.724s       3       41.2        0.0      10
+  TestReElection3A                             5.398s       3       85.6        0.0      10
+  TestManyElections3A                          8.558s       7      445.2        0.0      10
+  TestBasicAgree3B                             1.220s       3       16.0        3.0      10
+  TestRPCBytes3B                               2.426s       3       48.0       11.0      10
+  TestFollowerFailure3B                        5.272s       3       75.9        3.0      10
+  TestLeaderFailure3B                          5.831s       3      136.3        3.0      10
+  TestFailAgree3B                              5.188s       3       72.1        7.0      10
+  TestFailNoAgree3B                            4.683s       5      134.7        2.0      10
+  TestConcurrentStarts3B                       1.305s       3       16.2        0.0      10
+  TestRejoin3B                                 5.719s       3      120.1        4.0      10
+  TestBackup3B                                22.787s       5     1397.4      102.0      10
+  TestCount3B                                  2.842s       3       45.1        0.0      10
+  TestPersist13C                               5.788s       3       65.3        6.0      10
+  TestPersist23C                              25.579s       5      379.3       16.0      10
+  TestPersist33C                               2.741s       3       33.5        4.0      10
+  TestFigure83C                               45.051s       5      980.0        2.0      10
+  TestUnreliableAgree3C                        4.703s       5      656.0      246.0      10
+  TestFigure8Unreliable3C                     41.476s       5     2354.2        2.0      10
+  TestReliableChurn3C                         17.881s       5     1828.2        1.0      10
+  TestUnreliableChurn3C                       17.941s       5     1663.8        1.0      10
+  TestSnapshotBasic3D                          5.905s       3      375.1       31.0      10
+  TestSnapshotInstall3D                       56.618s       3     1070.9       91.0      10
+  TestSnapshotInstallUnreliable3D             72.468s       3     1264.3       91.0      10
+  TestSnapshotInstallCrash3D                  45.322s       3      767.3       91.0      10
+  TestSnapshotInstallUnCrash3D                53.059s       3      775.1       91.0      10
+  TestSnapshotAllCrash3D                      16.449s       3      327.5       61.4      10
+  TestSnapshotInit3D                           5.275s       3       83.5       14.0      10
+Average time sum of all test cases: 491.209s

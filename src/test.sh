@@ -1,26 +1,45 @@
 #!/usr/bin/env bash
 
 # Run repeated lab tests in parallel.
-# Usage: ./test.sh <test-filter> <test-target> <run-times> [max-parallel]
-# Example: ./test.sh 3A raft1 20 4
+# Usage: ./test.sh [test-filter] <test-target> <run-times> [max-parallel]
+# Examples:
+#   ./test.sh raft1 20 4
+#   ./test.sh 3A raft1 20 4
 
-if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
-  echo "Usage: $0 <test-filter> <test-target> <run-times> [max-parallel]"
-  echo "Example: $0 3A raft1 20 4"
+if [ "$#" -lt 2 ] || [ "$#" -gt 4 ]; then
+  echo "Usage: $0 [test-filter] <test-target> <run-times> [max-parallel]"
+  echo "Examples:"
+  echo "  $0 raft1 20 4"
+  echo "  $0 3A raft1 20 4"
   exit 1
 fi
 
-TEST_FILTER="$1"
-TEST_TARGET="$2"
-RUN_TIMES="$3"
+TEST_FILTER=""
+MAX_PARALLEL_ARG=""
+
+if [ "$#" -eq 2 ]; then
+  TEST_TARGET="$1"
+  RUN_TIMES="$2"
+elif [ "$#" -eq 3 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]]; then
+  TEST_TARGET="$1"
+  RUN_TIMES="$2"
+  MAX_PARALLEL_ARG="$3"
+else
+  TEST_FILTER="$1"
+  TEST_TARGET="$2"
+  RUN_TIMES="$3"
+  if [ "$#" -eq 4 ]; then
+    MAX_PARALLEL_ARG="$4"
+  fi
+fi
 
 if ! [[ "${RUN_TIMES}" =~ ^[1-9][0-9]*$ ]]; then
   echo "Error: run-times must be a positive integer"
   exit 1
 fi
 
-if [ "$#" -eq 4 ]; then
-  MAX_PARALLEL="$4"
+if [ -n "${MAX_PARALLEL_ARG}" ]; then
+  MAX_PARALLEL="${MAX_PARALLEL_ARG}"
 elif [ -n "${TEST_JOBS:-}" ]; then
   MAX_PARALLEL="${TEST_JOBS}"
 else
@@ -86,8 +105,13 @@ echo "Building ${TEST_TARGET} daemon once..."
 declare -a ACTIVE_PIDS=()
 declare -a ACTIVE_ROUNDS=()
 declare -a ACTIVE_LOGS=()
+declare -a TEST_ORDER=()
 declare -A TEST_TOTAL_US=()
 declare -A TEST_RUN_COUNTS=()
+declare -A TEST_PEERS=()
+declare -A TEST_TOTAL_RPCS=()
+declare -A TEST_TOTAL_OPS=()
+declare -A TEST_METRIC_COUNTS=()
 FAILED_ROUNDS=0
 
 collect_test_timings() {
@@ -95,13 +119,45 @@ collect_test_timings() {
   local test_name
   local duration_seconds
   local duration_us
+  local peers
+  local rpcs
+  local ops
 
   while read -r test_name duration_seconds; do
     [ -n "${test_name}" ] || continue
+    if [ -z "${TEST_RUN_COUNTS["${test_name}"]+x}" ]; then
+      TEST_ORDER+=("${test_name}")
+    fi
     duration_us="$(awk -v seconds="${duration_seconds}" 'BEGIN { printf "%.0f", seconds * 1000000 }')"
     TEST_TOTAL_US["${test_name}"]=$((${TEST_TOTAL_US["${test_name}"]:-0} + duration_us))
     TEST_RUN_COUNTS["${test_name}"]=$((${TEST_RUN_COUNTS["${test_name}"]:-0} + 1))
   done < <(sed -nE 's/^--- (PASS|FAIL): ([^ ]+) \(([0-9.]+)s\)$/\2 \3/p' "${log_file}")
+
+  while read -r test_name peers rpcs ops; do
+    [ -n "${test_name}" ] || continue
+    TEST_PEERS["${test_name}"]="${peers}"
+    TEST_TOTAL_RPCS["${test_name}"]=$((${TEST_TOTAL_RPCS["${test_name}"]:-0} + rpcs))
+    TEST_TOTAL_OPS["${test_name}"]=$((${TEST_TOTAL_OPS["${test_name}"]:-0} + ops))
+    TEST_METRIC_COUNTS["${test_name}"]=$((${TEST_METRIC_COUNTS["${test_name}"]:-0} + 1))
+  done < <(
+    awk '
+      /^=== RUN[[:space:]]+/ {
+        test_name = $3
+        next
+      }
+      /^[[:space:]]*\.\.\. Passed --/ {
+        peers = rpcs = ops = ""
+        for (i = 1; i <= NF; i++) {
+          if ($i == "#peers") peers = $(i + 1)
+          if ($i == "#RPCs") rpcs = $(i + 1)
+          if ($i == "#Ops") ops = $(i + 1)
+        }
+        if (test_name != "" && peers != "" && rpcs != "" && ops != "") {
+          print test_name, peers, rpcs, ops
+        }
+      }
+    ' "${log_file}"
+  )
 }
 
 wait_for_job() {
@@ -162,15 +218,27 @@ echo "Failed rounds: ${FAILED_ROUNDS}"
 
 if [ "${#TEST_RUN_COUNTS[@]}" -gt 0 ]; then
   echo ""
-  echo "Average time by test case:"
+  echo "Average statistics by test case:"
+  printf "  %-40s %10s %7s %10s %10s %7s\n" \
+    "Test case" "Avg time" "Peers" "Avg RPCs" "Avg Ops" "Runs"
   average_case_sum_us=0
-  while read -r test_name; do
+  for test_name in "${TEST_ORDER[@]}"; do
     average_us=$((TEST_TOTAL_US["${test_name}"] / TEST_RUN_COUNTS["${test_name}"]))
     average_case_sum_us=$((average_case_sum_us + average_us))
     average_seconds="$(awk -v microseconds="${average_us}" 'BEGIN { printf "%.3fs", microseconds / 1000000 }')"
-    printf "  %-40s %8s  (%d runs)\n" \
-      "${test_name}" "${average_seconds}" "${TEST_RUN_COUNTS["${test_name}"]}"
-  done < <(printf "%s\n" "${!TEST_RUN_COUNTS[@]}" | sort)
+    peers="-"
+    average_rpcs="-"
+    average_ops="-"
+    if [ "${TEST_METRIC_COUNTS["${test_name}"]:-0}" -gt 0 ]; then
+      metric_count="${TEST_METRIC_COUNTS["${test_name}"]}"
+      peers="${TEST_PEERS["${test_name}"]}"
+      average_rpcs="$(awk -v total="${TEST_TOTAL_RPCS["${test_name}"]}" -v count="${metric_count}" 'BEGIN { printf "%.1f", total / count }')"
+      average_ops="$(awk -v total="${TEST_TOTAL_OPS["${test_name}"]}" -v count="${metric_count}" 'BEGIN { printf "%.1f", total / count }')"
+    fi
+    printf "  %-40s %10s %7s %10s %10s %7d\n" \
+      "${test_name}" "${average_seconds}" "${peers}" "${average_rpcs}" "${average_ops}" \
+      "${TEST_RUN_COUNTS["${test_name}"]}"
+  done
   average_case_sum_seconds="$(awk -v microseconds="${average_case_sum_us}" 'BEGIN { printf "%.3fs", microseconds / 1000000 }')"
   echo "Average time sum of all test cases: ${average_case_sum_seconds}"
 fi
