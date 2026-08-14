@@ -2,3 +2,5 @@ pkg/
 *-handin.tar.gz
 .vscode/
 .agents/
+debug_log/
+test_log/
