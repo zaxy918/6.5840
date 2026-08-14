@@ -1,22 +1,23 @@
 package rsm
 
 import (
+	"log/slog"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"6.5840/kvsrv1/rpc"
 	"6.5840/labrpc"
-	"6.5840/raft1"
+	raft "6.5840/raft1"
 	"6.5840/raftapi"
-	"6.5840/tester1"
-
+	tester "6.5840/tester1"
 )
 
 type Op struct {
-	// Your definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	Me      int
+	ID      uint64
+	Request any
 }
-
 
 // A server (i.e., ../server.go) that wants to replicate itself calls
 // MakeRSM and must implement the StateMachine interface.  This
@@ -37,7 +38,9 @@ type RSM struct {
 	applyCh      chan raftapi.ApplyMsg
 	maxraftstate int // snapshot if log grows this big
 	sm           StateMachine
-	// Your definitions here.
+
+	opID     atomic.Uint64
+	opResChs map[int]chan applyResult
 }
 
 // servers[] contains the ports of the set of
@@ -61,7 +64,9 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 		maxraftstate: maxraftstate,
 		applyCh:      make(chan raftapi.ApplyMsg),
 		sm:           sm,
+		opResChs:     make(map[int]chan applyResult),
 	}
+	go rsm.Reader()
 	if !tester.UseRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
 	}
@@ -72,16 +77,88 @@ func (rsm *RSM) Raft() raftapi.Raft {
 	return rsm.rf
 }
 
-
 // Submit a command to Raft, and wait for it to be committed.  It
 // should return ErrWrongLeader if client should find new leader and
 // try again.
 func (rsm *RSM) Submit(req any) (rpc.Err, any) {
+	term, isLeader := rsm.rf.GetState()
+	// not leader
+	if !isLeader {
+		slog.Debug(
+			"SUBMIT",
+			"PEER", rsm.me,
+			"EVENT", "NOT_LEADER",
+		)
+		return rpc.ErrWrongLeader, nil
+	}
+	// construct op
+	op := Op{
+		Me:      rsm.me,
+		ID:      rsm.opID.Add(1),
+		Request: req,
+	}
+	// start raft agreement
+	slog.Debug(
+		"SUBMIT",
+		"PEER", rsm.me,
+		"EVENT", "START",
+		"OP", op.ID,
+	)
+	// start the operation
+	rsm.mu.Lock()
+	index, nterm, isLeader := rsm.rf.Start(op)
+	if nterm != term || !isLeader {
+		slog.Debug(
+			"SUBMIT",
+			"PEER", rsm.me,
+			"EVENT", "LEADER_CHANGE",
+			"OP", op.ID,
+		)
+		rsm.mu.Unlock()
+		return rpc.ErrWrongLeader, nil
+	}
+	// create a channel for the result
+	resCh := make(chan applyResult, 1)
+	rsm.opResChs[index] = resCh
+	rsm.mu.Unlock()
+	// wait for the result
+	return rsm.waitApply(term, op, resCh)
+}
 
-	// Submit creates an Op structure to run a command through Raft;
-	// for example: op := Op{Me: rsm.me, Id: id, Req: req}, where req
-	// is the argument to Submit and id is a unique id for the op.
-
-	// your code here
-	return rpc.ErrWrongLeader, nil // i'm dead, try another server.
+func (rsm *RSM) waitApply(term int, op Op, resCh chan applyResult) (rpc.Err, any) {
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
+	for {
+		select {
+		case res := <-resCh:
+			if res.op.ID != op.ID || res.op.Me != op.Me {
+				slog.Debug(
+					"SUBMIT",
+					"PEER", rsm.me,
+					"EVENT", "WRONG_OP",
+					"OP", op.ID,
+					"RES", res.op.ID,
+				)
+				return rpc.ErrWrongLeader, nil
+			}
+			slog.Debug(
+				"SUBMIT",
+				"PEER", rsm.me,
+				"EVENT", "SUBMIT_SUCCESS",
+				"OP", op.ID,
+			)
+			return rpc.OK, res.value
+		case <-timer.C:
+			timer.Reset(500 * time.Millisecond)
+			if nterm, isLeader := rsm.rf.GetState(); nterm != term || !isLeader {
+				slog.Debug(
+					"SUBMIT",
+					"PEER", rsm.me,
+					"EVENT", "LEADER_CHANGE",
+					"OP", op.ID,
+				)
+				return rpc.ErrWrongLeader, nil
+			}
+		}
+	}
 }
