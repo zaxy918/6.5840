@@ -34,7 +34,7 @@ func MakeClerk(clnt *tester.Clnt, server string) kvtest.IKVClerk {
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	for {
 		// Construct args and reply
-		args := rpc.GetArgs{key}
+		args := rpc.GetArgs{Key: key}
 		reply := rpc.GetReply{}
 		// Do rpc
 		slog.Debug("Client call KVserver.Get", "args", args)
@@ -82,7 +82,7 @@ func (ck *Clerk) Put(key, value string, version rpc.Tversion) rpc.Err {
 	firstCall := true
 	for {
 		// Construct args and reply
-		args := rpc.PutArgs{key, value, version}
+		args := rpc.PutArgs{Key: key, Value: value, Version: version}
 		reply := rpc.PutReply{}
 		// Do rpc
 		slog.Debug("Client call KVServer.Put", "args", args)

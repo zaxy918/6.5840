@@ -45,10 +45,10 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	key := args.Key
 	if vv, ok := kv.kvv[key]; ok {
 		// Key exist
-		*reply = rpc.GetReply{vv.value, vv.version, rpc.OK}
+		*reply = rpc.GetReply{Value: vv.value, Version: vv.version, Err: rpc.OK}
 	} else {
 		// Key not exist
-		*reply = rpc.GetReply{"", 0, rpc.ErrNoKey}
+		*reply = rpc.GetReply{Value: "", Version: 0, Err: rpc.ErrNoKey}
 	}
 	slog.Debug("Server Put reply with", "reply", reply)
 }
@@ -68,16 +68,16 @@ func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 		if vv.version == avv.version {
 			// Find the key with right version, put value with version + 1
 			kv.kvv[key] = VV{avv.value, avv.version + 1}
-			*reply = rpc.PutReply{rpc.OK}
+			*reply = rpc.PutReply{Err: rpc.OK}
 		} else {
 			// Version wrong
-			*reply = rpc.PutReply{rpc.ErrVersion}
+			*reply = rpc.PutReply{Err: rpc.ErrVersion}
 		}
 	} else if avv.version == 0 {
 		kv.kvv[key] = VV{avv.value, avv.version + 1}
-		*reply = rpc.PutReply{rpc.OK}
+		*reply = rpc.PutReply{Err: rpc.OK}
 	} else {
-		*reply = rpc.PutReply{rpc.ErrNoKey}
+		*reply = rpc.PutReply{Err: rpc.ErrNoKey}
 	}
 	slog.Debug("Server Put reply with", "reply", reply)
 }
