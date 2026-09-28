@@ -78,7 +78,8 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 	if !rf.isCurrentLeader(args.Term, reply.Term) {
 		return false
 	}
-	rf.matchIndex[server] = max(rf.matchIndex[server], args.LastIncludedIndex)
 	rf.nextIndex[server] = max(rf.nextIndex[server], args.LastIncludedIndex+1)
+	rf.matchIndex[server] = max(rf.matchIndex[server], args.LastIncludedIndex)
+	rf.advanceCommitIndex()
 	return rf.nextIndex[server] <= rf.lastLogIndex()
 }

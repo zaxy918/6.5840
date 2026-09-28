@@ -2,7 +2,6 @@ package raft
 
 import (
 	"log/slog"
-	"time"
 )
 
 type AppendEntriesArgs struct {
@@ -128,6 +127,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	// Update nextIndex and matchIndex for the server
 	rf.nextIndex[server] = max(args.PrevLogIndex+len(args.Entries)+1, rf.nextIndex[server])
 	rf.matchIndex[server] = max(rf.matchIndex[server], rf.nextIndex[server]-1)
+	rf.advanceCommitIndex()
 	return rf.nextIndex[server] <= rf.lastLogIndex()
 }
 
@@ -172,53 +172,28 @@ func (rf *Raft) retryBack(server int, args *AppendEntriesArgs) {
 	args.Entries = append([]LogEntry{}, rf.Logs(rf.nextIndex[server], rf.lastLogIndex()+1)...)
 }
 
-func (rf *Raft) waitMajorityAgreement(index, term int) {
-	var cntYes int
-	for {
-		rf.mu.Lock()
-		if rf.currentTerm != term || rf.state != Leader {
-			rf.mu.Unlock()
-			return
-		}
-		cntYes = 1
-		// count agreed servers
+func (rf *Raft) advanceCommitIndex() {
+	if rf.state != Leader {
+		return
+	}
+	for index := rf.lastLogIndex(); index > rf.commitIndex; index-- {
+		cnt := 1
 		for server := range rf.peers {
-			if server != rf.me && rf.matchIndex[server] >= index {
-				cntYes++
+			if server != rf.me && rf.matchIndex[server] >= index && rf.Log(index).Term == rf.currentTerm {
+				cnt++
 			}
 		}
-		rf.mu.Unlock()
-		// gain majority
-		if cntYes > len(rf.peers)/2 {
-			rf.mu.Lock()
-			defer rf.mu.Unlock()
+		if cnt > len(rf.peers)/2 {
 			slog.Debug(
 				"AGREEMENT",
 				"PEER", rf.me,
-				"EVENT", "AGREEMENT_REACHED",
+				"EVENT", "ADVANCE_COMMIT_INDEX",
 				"INDEX", index,
-				"TERM", term,
+				"TERM", rf.currentTerm,
 			)
-			if index > rf.commitIndex {
-				rf.commitIndex = index
-				rf.cond.Broadcast()
-			}
+			rf.commitIndex = index
+			rf.cond.Broadcast()
 			return
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
-}
-
-func (rf *Raft) startAgreement(index, term int) {
-	rf.mu.Lock()
-	slog.Debug(
-		"AGREEMENT",
-		"PEER", rf.me,
-		"EVENT", "START_AGREEMENT",
-		"INDEX", index,
-		"TERM", term,
-	)
-	rf.notifyAllReplicators()
-	rf.mu.Unlock()
-	rf.waitMajorityAgreement(index, term)
 }

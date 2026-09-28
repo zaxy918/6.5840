@@ -37,7 +37,7 @@ func (rf *Raft) Start(command any) (int, int, bool) {
 		rf.persist()
 		index := rf.lastLogIndex()
 		term := rf.currentTerm
-		go rf.startAgreement(index, term)
+		rf.notifyAllReplicators()
 		return index, term, true
 	} else {
 		return -1, rf.currentTerm, false
