@@ -49,53 +49,49 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 		leader := ck.leader
 		ck.mu.Unlock()
 		// Do rpc
-		if ok := ck.clnt.Call(ck.servers[leader], "KVServer.Get", &args, &reply); ok {
-			switch reply.Err {
-			case rpc.OK:
-				slog.Debug(
-					"CLIENT_GET",
-					"PEER", leader,
-					"EVENT", "GET_SUCCESS",
-				)
-				return reply.Value, reply.Version, rpc.OK
-			case rpc.ErrNoKey:
-				slog.Debug(
-					"CLIENT_GET",
-					"PEER", leader,
-					"EVENT", "GET_NO_KEY",
-				)
-				return "", 0, reply.Err
-			case rpc.ErrWrongLeader:
-				// Try next server
-				slog.Debug(
-					"CLIENT_GET",
-					"PEER", leader,
-					"EVENT", "GET_WRONG_LEADER",
-				)
-				ck.mu.Lock()
-				if ck.leader == leader {
-					ck.leader = (ck.leader + 1) % len(ck.servers)
-				}
-				ck.mu.Unlock()
-				time.Sleep(RETRY_INTERVAL)
-				continue
-			default:
-				slog.Debug(
-					"CLIENT_GET",
-					"PEER", leader,
-					"EVENT", "GET_ERROR",
-				)
-				time.Sleep(RETRY_INTERVAL)
-				continue
-			}
-		} else {
+		if ok := ck.clnt.Call(ck.servers[leader], "KVServer.Get", &args, &reply); !ok {
 			// Rpc not succeed
+			ck.nextServer()
 			time.Sleep(RETRY_INTERVAL)
 			slog.Debug(
 				"CLIENT_GET",
 				"PEER", leader,
 				"EVENT", "GET_RPC_FAIL",
 			)
+			continue
+		}
+		switch reply.Err {
+		case rpc.OK:
+			slog.Debug(
+				"CLIENT_GET",
+				"PEER", leader,
+				"EVENT", "GET_SUCCESS",
+			)
+			return reply.Value, reply.Version, rpc.OK
+		case rpc.ErrNoKey:
+			slog.Debug(
+				"CLIENT_GET",
+				"PEER", leader,
+				"EVENT", "GET_NO_KEY",
+			)
+			return "", 0, reply.Err
+		case rpc.ErrWrongLeader:
+			// Try next server
+			slog.Debug(
+				"CLIENT_GET",
+				"PEER", leader,
+				"EVENT", "GET_WRONG_LEADER",
+			)
+			ck.nextServer()
+			time.Sleep(RETRY_INTERVAL)
+			continue
+		default:
+			slog.Debug(
+				"CLIENT_GET",
+				"PEER", leader,
+				"EVENT", "GET_ERROR",
+			)
+			time.Sleep(RETRY_INTERVAL)
 			continue
 		}
 	}
@@ -129,55 +125,49 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 		leader := ck.leader
 		ck.mu.Unlock()
 		// Do rpc
-		if ok := ck.clnt.Call(ck.servers[leader], "KVServer.Put", &args, &reply); ok {
-			if reply.Err == rpc.ErrWrongLeader {
-				slog.Debug(
-					"CLIENT_PUT",
-					"PEER", leader,
-					"EVENT", "PUT_WRONG_LEADER",
-				)
-				ck.mu.Lock()
-				if ck.leader == leader {
-					ck.leader = (ck.leader + 1) % len(ck.servers)
-				}
-				ck.mu.Unlock()
-				time.Sleep(RETRY_INTERVAL)
-				continue
-			}
-			if !firstCall && reply.Err == rpc.ErrVersion {
-				slog.Debug(
-					"CLIENT_PUT",
-					"PEER", leader,
-					"EVENT", "PUT_RESEND_ERR_VERSION",
-				)
-				// A resend call with ErrVersion
-				return rpc.ErrMaybe
-			} else {
-				slog.Debug(
-					"CLIENT_PUT",
-					"PEER", leader,
-					"EVENT", "PUT_SUCCESS",
-				)
-				return reply.Err
-			}
-		} else if firstCall {
-			// Do call later
-			slog.Debug(
-				"CLIENT_PUT",
-				"PEER", leader,
-				"EVENT", "PUT_FIRST_CALL_FAIL",
-			)
-			time.Sleep(RETRY_INTERVAL)
+		if ok := ck.clnt.Call(ck.servers[leader], "KVServer.Put", &args, &reply); !ok {
 			firstCall = false
-			continue
-		} else {
-			// Two call fail
 			slog.Debug(
 				"CLIENT_PUT",
 				"PEER", leader,
-				"EVENT", "PUT_RECALL_FAIL",
+				"EVENT", "PUT_RPC_FAIL",
 			)
+			ck.nextServer()
+			time.Sleep(RETRY_INTERVAL)
+			continue
+		}
+		if reply.Err == rpc.ErrWrongLeader {
+			slog.Debug(
+				"CLIENT_PUT",
+				"PEER", leader,
+				"EVENT", "PUT_WRONG_LEADER",
+			)
+			firstCall = false
+			ck.nextServer()
+			time.Sleep(RETRY_INTERVAL)
+			continue
+		}
+		if !firstCall && reply.Err == rpc.ErrVersion {
+			slog.Debug(
+				"CLIENT_PUT",
+				"PEER", leader,
+				"EVENT", "PUT_RESEND_ERR_VERSION",
+			)
+			// A resend call with ErrVersion
 			return rpc.ErrMaybe
+		} else {
+			slog.Debug(
+				"CLIENT_PUT",
+				"PEER", leader,
+				"EVENT", "PUT_SUCCESS",
+			)
+			return reply.Err
 		}
 	}
+}
+
+func (ck *Clerk) nextServer() {
+	ck.mu.Lock()
+	defer ck.mu.Unlock()
+	ck.leader = (ck.leader + 1) % len(ck.servers)
 }
