@@ -41,7 +41,9 @@ func (ck *Clerk) Leader() int {
 // must match the declared types of the RPC handler function's
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
+	ck.mu.Lock()
 	originLeader := ck.leader
+	ck.mu.Unlock()
 	for {
 		// Construct args and reply
 		args := rpc.GetArgs{Key: key}
@@ -118,7 +120,9 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// If the client is first do the rpc
 	firstCall := true
+	ck.mu.Lock()
 	originLeader := ck.leader
+	ck.mu.Unlock()
 	for {
 		// Construct args and reply
 		args := rpc.PutArgs{Key: key, Value: value, Version: version}
