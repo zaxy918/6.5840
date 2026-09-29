@@ -10,7 +10,7 @@ import (
 	tester "6.5840/tester1"
 )
 
-const RETRY_INTERVAL = time.Millisecond * 100
+const RETRY_INTERVAL = time.Millisecond * 50
 
 type Clerk struct {
 	clnt    *tester.Clnt
@@ -41,6 +41,7 @@ func (ck *Clerk) Leader() int {
 // must match the declared types of the RPC handler function's
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
+	originLeader := ck.leader
 	for {
 		// Construct args and reply
 		args := rpc.GetArgs{Key: key}
@@ -52,7 +53,7 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 		if ok := ck.clnt.Call(ck.servers[leader], "KVServer.Get", &args, &reply); !ok {
 			// Rpc not succeed
 			ck.nextServer()
-			time.Sleep(RETRY_INTERVAL)
+			ck.backoff(originLeader)
 			slog.Debug(
 				"CLIENT_GET",
 				"PEER", leader,
@@ -83,7 +84,7 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 				"EVENT", "GET_WRONG_LEADER",
 			)
 			ck.nextServer()
-			time.Sleep(RETRY_INTERVAL)
+			ck.backoff(originLeader)
 			continue
 		default:
 			slog.Debug(
@@ -91,7 +92,7 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 				"PEER", leader,
 				"EVENT", "GET_ERROR",
 			)
-			time.Sleep(RETRY_INTERVAL)
+			ck.backoff(originLeader)
 			continue
 		}
 	}
@@ -117,6 +118,7 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// If the client is first do the rpc
 	firstCall := true
+	originLeader := ck.leader
 	for {
 		// Construct args and reply
 		args := rpc.PutArgs{Key: key, Value: value, Version: version}
@@ -133,7 +135,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 				"EVENT", "PUT_RPC_FAIL",
 			)
 			ck.nextServer()
-			time.Sleep(RETRY_INTERVAL)
+			ck.backoff(originLeader)
 			continue
 		}
 		if reply.Err == rpc.ErrWrongLeader {
@@ -144,7 +146,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 			)
 			firstCall = false
 			ck.nextServer()
-			time.Sleep(RETRY_INTERVAL)
+			ck.backoff(originLeader)
 			continue
 		}
 		if !firstCall && reply.Err == rpc.ErrVersion {
@@ -170,4 +172,10 @@ func (ck *Clerk) nextServer() {
 	ck.mu.Lock()
 	defer ck.mu.Unlock()
 	ck.leader = (ck.leader + 1) % len(ck.servers)
+}
+
+func (ck *Clerk) backoff(leader int) {
+	if leader == ck.leader {
+		time.Sleep(RETRY_INTERVAL)
+	}
 }
