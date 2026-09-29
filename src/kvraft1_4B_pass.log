@@ -1,0 +1,237 @@
+Summary log: /home/zaxy/studyspace/projects/6.5840/src/test_log/lab4/20260929/4B_100_4_default_20260929145702.log
+Invocation timestamp: 20260929145702
+Debug log root: /home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4
+Go executable: /usr/local/go/bin/go
+
+Building required daemons...
+  Building /home/zaxy/studyspace/projects/6.5840/src/main/kvraft1d from /home/zaxy/studyspace/projects/6.5840/src/main/kvraft1d.go
+Daemon build completed.
+
+Scheduling 100 jobs with max-parallel=4...
+[START] suite=4B round=1 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round1_20260929145702.log
+[START] suite=4B round=2 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round2_20260929145702.log
+[START] suite=4B round=3 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round3_20260929145702.log
+[START] suite=4B round=4 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round4_20260929145702.log
+[PASS] suite=4B round=4
+[START] suite=4B round=5 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round5_20260929145935.log
+[PASS] suite=4B round=1
+[START] suite=4B round=6 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round6_20260929145936.log
+[PASS] suite=4B round=3
+[START] suite=4B round=7 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round7_20260929145939.log
+[PASS] suite=4B round=2
+[START] suite=4B round=8 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round8_20260929145944.log
+[PASS] suite=4B round=7
+[START] suite=4B round=9 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round9_20260929150212.log
+[PASS] suite=4B round=5
+[START] suite=4B round=10 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round10_20260929150213.log
+[PASS] suite=4B round=6
+[START] suite=4B round=11 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round11_20260929150217.log
+[PASS] suite=4B round=8
+[START] suite=4B round=12 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round12_20260929150224.log
+[PASS] suite=4B round=9
+[START] suite=4B round=13 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round13_20260929150446.log
+[PASS] suite=4B round=10
+[START] suite=4B round=14 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round14_20260929150448.log
+[PASS] suite=4B round=11
+[START] suite=4B round=15 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round15_20260929150455.log
+[PASS] suite=4B round=12
+[START] suite=4B round=16 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round16_20260929150501.log
+[PASS] suite=4B round=14
+[START] suite=4B round=17 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round17_20260929150720.log
+[PASS] suite=4B round=13
+[START] suite=4B round=18 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round18_20260929150730.log
+[PASS] suite=4B round=16
+[START] suite=4B round=19 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round19_20260929150738.log
+[PASS] suite=4B round=15
+[START] suite=4B round=20 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round20_20260929150739.log
+[PASS] suite=4B round=17
+[START] suite=4B round=21 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round21_20260929150947.log
+[PASS] suite=4B round=18
+[START] suite=4B round=22 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round22_20260929151006.log
+[PASS] suite=4B round=19
+[START] suite=4B round=23 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round23_20260929151008.log
+[PASS] suite=4B round=20
+[START] suite=4B round=24 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round24_20260929151020.log
+[PASS] suite=4B round=21
+[START] suite=4B round=25 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round25_20260929151230.log
+[PASS] suite=4B round=23
+[START] suite=4B round=26 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round26_20260929151240.log
+[PASS] suite=4B round=22
+[START] suite=4B round=27 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round27_20260929151244.log
+[PASS] suite=4B round=24
+[START] suite=4B round=28 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round28_20260929151257.log
+[PASS] suite=4B round=25
+[START] suite=4B round=29 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round29_20260929151509.log
+[PASS] suite=4B round=26
+[START] suite=4B round=30 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round30_20260929151522.log
+[PASS] suite=4B round=27
+[START] suite=4B round=31 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round31_20260929151525.log
+[PASS] suite=4B round=28
+[START] suite=4B round=32 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round32_20260929151526.log
+[PASS] suite=4B round=29
+[START] suite=4B round=33 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round33_20260929151748.log
+[PASS] suite=4B round=30
+[START] suite=4B round=34 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round34_20260929151753.log
+[PASS] suite=4B round=32
+[START] suite=4B round=35 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round35_20260929151757.log
+[PASS] suite=4B round=31
+[START] suite=4B round=36 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round36_20260929151800.log
+[PASS] suite=4B round=33
+[START] suite=4B round=37 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round37_20260929152021.log
+[PASS] suite=4B round=34
+[START] suite=4B round=38 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round38_20260929152033.log
+[PASS] suite=4B round=35
+[START] suite=4B round=39 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round39_20260929152035.log
+[PASS] suite=4B round=36
+[START] suite=4B round=40 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round40_20260929152041.log
+[PASS] suite=4B round=37
+[START] suite=4B round=41 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round41_20260929152258.log
+[PASS] suite=4B round=39
+[START] suite=4B round=42 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round42_20260929152305.log
+[PASS] suite=4B round=40
+[START] suite=4B round=43 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round43_20260929152314.log
+[PASS] suite=4B round=38
+[START] suite=4B round=44 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round44_20260929152326.log
+[PASS] suite=4B round=41
+[START] suite=4B round=45 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round45_20260929152531.log
+[PASS] suite=4B round=42
+[START] suite=4B round=46 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round46_20260929152537.log
+[PASS] suite=4B round=43
+[START] suite=4B round=47 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round47_20260929152550.log
+[PASS] suite=4B round=44
+[START] suite=4B round=48 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round48_20260929152558.log
+[PASS] suite=4B round=45
+[START] suite=4B round=49 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round49_20260929152804.log
+[PASS] suite=4B round=47
+[START] suite=4B round=50 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round50_20260929152822.log
+[PASS] suite=4B round=46
+[START] suite=4B round=51 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round51_20260929152823.log
+[PASS] suite=4B round=48
+[START] suite=4B round=52 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round52_20260929152830.log
+[PASS] suite=4B round=49
+[START] suite=4B round=53 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round53_20260929153044.log
+[PASS] suite=4B round=50
+[START] suite=4B round=54 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round54_20260929153053.log
+[PASS] suite=4B round=51
+[START] suite=4B round=55 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round55_20260929153100.log
+[PASS] suite=4B round=52
+[START] suite=4B round=56 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round56_20260929153116.log
+[PASS] suite=4B round=53
+[START] suite=4B round=57 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round57_20260929153320.log
+[PASS] suite=4B round=54
+[START] suite=4B round=58 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round58_20260929153327.log
+[PASS] suite=4B round=55
+[START] suite=4B round=59 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round59_20260929153337.log
+[PASS] suite=4B round=56
+[START] suite=4B round=60 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round60_20260929153356.log
+[PASS] suite=4B round=57
+[START] suite=4B round=61 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round61_20260929153548.log
+[PASS] suite=4B round=58
+[START] suite=4B round=62 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round62_20260929153559.log
+[PASS] suite=4B round=59
+[START] suite=4B round=63 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round63_20260929153613.log
+[PASS] suite=4B round=60
+[START] suite=4B round=64 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round64_20260929153627.log
+[PASS] suite=4B round=61
+[START] suite=4B round=65 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round65_20260929153821.log
+[PASS] suite=4B round=62
+[START] suite=4B round=66 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round66_20260929153828.log
+[PASS] suite=4B round=63
+[START] suite=4B round=67 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round67_20260929153854.log
+[PASS] suite=4B round=64
+[START] suite=4B round=68 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round68_20260929153902.log
+[PASS] suite=4B round=65
+[START] suite=4B round=69 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round69_20260929154056.log
+[PASS] suite=4B round=66
+[START] suite=4B round=70 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round70_20260929154107.log
+[PASS] suite=4B round=67
+[START] suite=4B round=71 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round71_20260929154129.log
+[PASS] suite=4B round=68
+[START] suite=4B round=72 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round72_20260929154144.log
+[PASS] suite=4B round=69
+[START] suite=4B round=73 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round73_20260929154330.log
+[PASS] suite=4B round=70
+[START] suite=4B round=74 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round74_20260929154339.log
+[PASS] suite=4B round=71
+[START] suite=4B round=75 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round75_20260929154401.log
+[PASS] suite=4B round=72
+[START] suite=4B round=76 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round76_20260929154420.log
+[PASS] suite=4B round=73
+[START] suite=4B round=77 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round77_20260929154606.log
+[PASS] suite=4B round=74
+[START] suite=4B round=78 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round78_20260929154618.log
+[PASS] suite=4B round=75
+[START] suite=4B round=79 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round79_20260929154634.log
+[PASS] suite=4B round=76
+[START] suite=4B round=80 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round80_20260929154652.log
+[PASS] suite=4B round=78
+[START] suite=4B round=81 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round81_20260929154842.log
+[PASS] suite=4B round=77
+[START] suite=4B round=82 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round82_20260929154850.log
+[PASS] suite=4B round=79
+[START] suite=4B round=83 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round83_20260929154909.log
+[PASS] suite=4B round=80
+[START] suite=4B round=84 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round84_20260929154929.log
+[PASS] suite=4B round=81
+[START] suite=4B round=85 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round85_20260929155114.log
+[PASS] suite=4B round=82
+[START] suite=4B round=86 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round86_20260929155124.log
+[PASS] suite=4B round=83
+[START] suite=4B round=87 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round87_20260929155141.log
+[PASS] suite=4B round=84
+[START] suite=4B round=88 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round88_20260929155203.log
+[PASS] suite=4B round=85
+[START] suite=4B round=89 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round89_20260929155341.log
+[PASS] suite=4B round=86
+[START] suite=4B round=90 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round90_20260929155400.log
+[PASS] suite=4B round=87
+[START] suite=4B round=91 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round91_20260929155423.log
+[PASS] suite=4B round=88
+[START] suite=4B round=92 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round92_20260929155430.log
+[PASS] suite=4B round=89
+[START] suite=4B round=93 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round93_20260929155615.log
+[PASS] suite=4B round=90
+[START] suite=4B round=94 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round94_20260929155643.log
+[PASS] suite=4B round=91
+[START] suite=4B round=95 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round95_20260929155659.log
+[PASS] suite=4B round=92
+[START] suite=4B round=96 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round96_20260929155707.log
+[PASS] suite=4B round=93
+[START] suite=4B round=97 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round97_20260929155845.log
+[PASS] suite=4B round=94
+[START] suite=4B round=98 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round98_20260929155916.log
+[PASS] suite=4B round=95
+[START] suite=4B round=99 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round99_20260929155935.log
+[PASS] suite=4B round=96
+[START] suite=4B round=100 filter=4B log=/home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/20260929/4B_round100_20260929155939.log
+[PASS] suite=4B round=97
+[PASS] suite=4B round=98
+[PASS] suite=4B round=99
+[PASS] suite=4B round=100
+
+Test case statistics
+Suite  Test case                                    Avg time   Peers   Avg RPCs    Avg Ops   Pass   Fail   Runs
+------ ------------------------------------------ ---------- ------- ---------- ---------- ------ ------ ------
+4B     TestBasic4B                                    4.143s       5     2278.4      649.6    100      0    100
+4B     TestSpeed4B                                   19.455s       3     4320.9     1002.0    100      0    100
+4B     TestConcurrent4B                               4.785s       5     2055.8     1404.0    100      0    100
+4B     TestUnreliable4B                               5.332s       5     1452.4      436.1    100      0    100
+4B     TestOnePartition4B                             5.160s       5      466.9       15.6    100      0    100
+4B     TestManyPartitionsOneClient4B                 12.103s       5     2723.1      655.8    100      0    100
+4B     TestManyPartitionsManyClients4B               12.297s       5     2564.5     1461.3    100      0    100
+4B     TestPersistOneClient4B                        10.262s       5     2274.8      637.1    100      0    100
+4B     TestPersistConcurrent4B                       10.837s       5     2269.0     1438.0    100      0    100
+4B     TestPersistConcurrentUnreliable4B             11.495s       5     1428.9      370.7    100      0    100
+4B     TestPersistPartition4B                        18.544s       5     2743.9     1448.6    100      0    100
+4B     TestPersistPartitionUnreliable4B              18.274s       5     1847.6      383.2    100      0    100
+4B     TestPersistPartitionUnreliableLinearizable4B    21.453s       7     4352.9      903.1    100      0    100
+
+Invocation summary
+  Invocation timestamp: 20260929145702
+  Summary log path: /home/zaxy/studyspace/projects/6.5840/src/test_log/lab4/20260929/4B_100_4_default_20260929145702.log
+  Debug log root/date: /home/zaxy/studyspace/projects/6.5840/src/debug_log/lab4/<job-start-date>
+  Total jobs: 100
+  Passed jobs: 100
+  Failed jobs: 0
+  4B rounds: passed=100 failed=0; average time sum=154.142s
+  Retained failure logs: none
