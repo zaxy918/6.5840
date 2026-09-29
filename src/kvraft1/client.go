@@ -10,7 +10,7 @@ import (
 	tester "6.5840/tester1"
 )
 
-const RETRY_INTERVAL = time.Millisecond * 50
+const RETRY_INTERVAL = time.Millisecond * 100
 
 type Clerk struct {
 	clnt    *tester.Clnt
@@ -175,6 +175,8 @@ func (ck *Clerk) nextServer() {
 }
 
 func (ck *Clerk) backoff(leader int) {
+	ck.mu.Lock()
+	defer ck.mu.Unlock()
 	if leader == ck.leader {
 		time.Sleep(RETRY_INTERVAL)
 	}
