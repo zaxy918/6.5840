@@ -39,8 +39,9 @@ type RSM struct {
 	maxraftstate int // snapshot if log grows this big
 	sm           StateMachine
 
-	opID     atomic.Uint64
-	opResChs map[int]chan applyResult
+	opID             atomic.Uint64
+	opResChs         map[int]chan applyResult
+	lastAppliedIndex int
 }
 
 // servers[] contains the ports of the set of
@@ -66,9 +67,29 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 		sm:           sm,
 		opResChs:     make(map[int]chan applyResult),
 	}
-	go rsm.Reader()
+	go rsm.reader()
 	if !tester.UseRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
+	}
+	go func() {
+		for {
+			if rsm.rf.PersistBytes() >= rsm.maxraftstate && rsm.maxraftstate != -1 {
+				rsm.mu.Lock()
+				index := rsm.lastAppliedIndex
+				if index <= 0 {
+					rsm.mu.Unlock()
+					continue
+				}
+				snap := rsm.sm.Snapshot()
+				rsm.mu.Unlock()
+				rsm.rf.Snapshot(index, snap)
+			}
+			time.Sleep(300 * time.Millisecond)
+		}
+	}()
+	snap := persister.ReadSnapshot()
+	if len(snap) > 0 {
+		rsm.sm.Restore(snap)
 	}
 	return rsm
 }

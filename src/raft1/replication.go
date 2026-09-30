@@ -43,7 +43,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.leaderID = args.LeaderID
 	rf.persist()
 	// not matching, retry
-	if args.PrevLogIndex > rf.lastLogIndex() || rf.Log(args.PrevLogIndex).Term != args.PrevLogTerm {
+	if args.PrevLogIndex < rf.index0 || args.PrevLogIndex > rf.lastLogIndex() || rf.Log(args.PrevLogIndex).Term != args.PrevLogTerm {
 		slog.Debug(
 			"APPEND",
 			"PEER", rf.me,
@@ -66,8 +66,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 	rf.persist()
 	*reply = AppendEntriesReply{Term: rf.currentTerm, Success: true}
-	rf.commitIndex = min(args.LeaderCommit, rf.lastLogIndex())
-	rf.cond.Broadcast()
+	newCommitIndex := min(args.LeaderCommit, rf.lastLogIndex())
+	if newCommitIndex > rf.commitIndex {
+		rf.commitIndex = newCommitIndex
+		rf.cond.Broadcast()
+	}
 }
 
 func (rf *Raft) replicator(server int) {

@@ -1,6 +1,7 @@
 package kvraft
 
 import (
+	"bytes"
 	"log/slog"
 	"sync"
 
@@ -12,15 +13,15 @@ import (
 )
 
 type VV struct {
-	value   string
-	version rpc.Tversion
+	Value   string
+	Version rpc.Tversion
 }
 
 type KVServer struct {
 	me  int
 	rsm *rsm.RSM
 
-	kvv map[string]VV
+	Kvv map[string]VV
 	mu  sync.Mutex
 }
 
@@ -40,8 +41,8 @@ func (kv *KVServer) DoOp(req any) any {
 			"EVENT", "GET",
 		)
 		// Key exists, return value
-		if vv, ok := kv.kvv[req.Key]; ok {
-			return rpc.GetReply{Value: vv.value, Version: vv.version, Err: rpc.OK}
+		if vv, ok := kv.Kvv[req.Key]; ok {
+			return rpc.GetReply{Value: vv.Value, Version: vv.Version, Err: rpc.OK}
 		}
 		// Key doesn't exist, return ErrNoKey
 		return rpc.GetReply{Value: "", Version: 0, Err: rpc.ErrNoKey}
@@ -52,9 +53,9 @@ func (kv *KVServer) DoOp(req any) any {
 			"EVENT", "PUT",
 		)
 		// Key exists, check version
-		if vv, ok := kv.kvv[req.Key]; ok {
-			if vv.version == req.Version {
-				kv.kvv[req.Key] = VV{value: req.Value, version: vv.version + 1}
+		if vv, ok := kv.Kvv[req.Key]; ok {
+			if vv.Version == req.Version {
+				kv.Kvv[req.Key] = VV{Value: req.Value, Version: vv.Version + 1}
 				return rpc.PutReply{Err: rpc.OK}
 			} else {
 				return rpc.PutReply{Err: rpc.ErrVersion}
@@ -62,7 +63,7 @@ func (kv *KVServer) DoOp(req any) any {
 		}
 		// Key doesn't exist, check version
 		if req.Version == 0 {
-			kv.kvv[req.Key] = VV{value: req.Value, version: 1}
+			kv.Kvv[req.Key] = VV{Value: req.Value, Version: 1}
 			return rpc.PutReply{Err: rpc.OK}
 		} else {
 			return rpc.PutReply{Err: rpc.ErrNoKey}
@@ -72,12 +73,35 @@ func (kv *KVServer) DoOp(req any) any {
 }
 
 func (kv *KVServer) Snapshot() []byte {
-	// Your code here
-	return nil
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(kv.Kvv)
+	data := w.Bytes()
+	slog.Debug(
+		"SNAPSHOT",
+		"PEER", kv.me,
+		"EVENT", "SNAPSHOT",
+		"SIZE", len(data),
+	)
+	return data
 }
 
 func (kv *KVServer) Restore(data []byte) {
-	// Your code here
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	r := bytes.NewReader(data)
+	d := labgob.NewDecoder(r)
+	slog.Debug(
+		"RESTORE",
+		"PEER", kv.me,
+		"EVENT", "RESTORE",
+		"SIZE", len(data),
+	)
+	if err := d.Decode(&kv.Kvv); err != nil {
+		slog.Error("Failed to decode Kvv", "err", err)
+	}
 }
 
 func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
@@ -121,10 +145,9 @@ func StartKVServer(servers []*labrpc.ClientEnd, gid tester.Tgid, me int, persist
 	labgob.Register(rpc.PutArgs{})
 	labgob.Register(rpc.GetArgs{})
 
-	kv := &KVServer{me: me, kvv: make(map[string]VV)}
+	kv := &KVServer{me: me, Kvv: make(map[string]VV)}
 
 	kv.rsm = rsm.MakeRSM(servers, me, persister, maxraftstate, kv)
-	// You may need initialization code here.
 	return []any{kv, kv.rsm.Raft()}
 }
 
