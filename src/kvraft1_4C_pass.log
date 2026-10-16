@@ -2015,7 +2015,7 @@ Suite  Test case                                    Avg time   Peers   Avg RPCs 
 4C     TestSnapshotRPC4C                              2.914s       3      207.5       71.9   1000      0   1000
 4C     TestSnapshotSize4C                             3.964s       3     3483.2     1200.0   1000      0   1000
 4C     TestSpeed4C                                    4.763s       3     4399.4     1002.0   1000      0   1000
-4C     TestSnapshotRecover4C                         10.217s       5     3908.7     1175.6    999      0    999
+4C     TestSnapshotRecover4C                         10.217s       5     3908.7     1175.6   1000      0   1000
 4C     TestSnapshotRecoverManyClients4C              14.264s       5     5784.6     5209.2   1000      0   1000
 4C     TestSnapshotUnreliable4C                       5.519s       5     1473.5      411.1   1000      0   1000
 4C     TestSnapshotUnreliableRecover4C               11.674s       5     1364.3      328.9   1000      0   1000
